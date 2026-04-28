@@ -1,4 +1,4 @@
-# 开发环境与打包说明
+﻿# 开发环境与打包说明
 
 本文档记录 Zotero AnnotAI 当前阶段的开发、打包和手动验证方式。
 
@@ -23,15 +23,16 @@ npm run package
 打包完成后会生成：
 
 ```text
-dist/zotero-annotai-0.1.2.xpi
+dist/zotero-annotai-0.1.12.xpi
 ```
 
-这个 `.xpi` 目前包含 Zotero 插件最小文件和阶段二选区验证脚本：
+这个 `.xpi` 目前包含 Zotero 插件最小文件、阶段二选区验证脚本和阶段三浮窗脚本：
 
 ```text
 manifest.json
 bootstrap.js
 prefs.js
+src/floating-panel.js
 src/reader-selection.js
 ```
 
@@ -60,7 +61,7 @@ Tools -> Add-ons -> 齿轮菜单 -> Install Add-on From File...
 选择：
 
 ```text
-dist/zotero-annotai-0.1.2.xpi
+dist/zotero-annotai-0.1.12.xpi
 ```
 
 ## 查看启动日志
@@ -74,20 +75,21 @@ Help -> Debug Output Logging -> View Output
 安装、启用或重启 Zotero 后，应看到类似日志：
 
 ```text
-[Zotero AnnotAI] Startup 0.1.2
+[Zotero AnnotAI] Startup 0.1.12
+[Zotero AnnotAI] Floating panel module initialized
 [Zotero AnnotAI] Reader selection listener registered
 ```
 
 禁用或卸载插件时，应看到类似：
 
 ```text
-[Zotero AnnotAI] Shutdown 0.1.2
-[Zotero AnnotAI] Uninstall 0.1.2
+[Zotero AnnotAI] Shutdown 0.1.12
+[Zotero AnnotAI] Uninstall 0.1.12
 ```
 
 ## 阶段二选区验证
 
-在 Zotero 7 中打开任意 PDF，鼠标选中一段文字。Zotero 原生文本选区弹窗中应出现：
+在 Zotero 7 中打开任意 PDF，鼠标选中一段文字。Zotero 原生文本选区弹窗内部应出现：
 
 ```text
 AnnotAI | 翻译 | 解释 | 问答
@@ -103,21 +105,45 @@ AnnotAI | 翻译 | 解释 | 问答
 
 更完整的阶段二验收说明见 `docs/phase-2-reader-selection.md`。
 
+## 阶段三浮窗验证
+
+在 Zotero 7 中打开任意 PDF，鼠标选中一段文字。点击 `翻译`、`解释` 或 `问答` 后，应打开对应诊断小浮窗。
+
+阶段三浮窗应支持：
+
+- 拖动标题栏改变位置。
+- 拖动右下角调整大小。
+- 点击右上角关闭。
+- 点击浮窗任意可见区域将该浮窗置顶。
+- 显示当前选区和条目元数据的详细诊断。
+- 初始打开使用固定可见位置；重复点击同一动作时保留已有浮窗位置和大小。
+- 打开、升级和聚焦提示通过底部中间渐入渐出的 toast 显示，不写在 Zotero 原生选区弹窗里。
+- AnnotAI 操作区应追加在 Zotero 原生文本选区弹窗内部，不能让 Zotero 自带按钮或其他插件入口消失。
+- AnnotAI 浮窗位于 Zotero 阅读器普通内容、侧栏和原生选区弹窗之上；插件不修改 Zotero 原生选区弹窗或其祖先节点的层级样式，避免阻断浮窗拖拽、关闭、缩放和 PDF 滚轮滚动。
+
+重复点击规则：
+
+- `翻译`：更新同一个翻译浮窗的当前选区诊断，并增加升级次数。
+- `解释`：更新同一个解释浮窗的当前选区诊断，并增加升级次数。
+- `问答`：更新同一个问答浮窗的当前选区诊断，并增加升级次数；不新开、不移动已有浮窗。
+
+更完整的阶段三验收说明见 `docs/phase-3-floating-panel.md`。
+
 ## 当前阶段边界
 
-当前阶段只验证插件骨架和 PDF 阅读器选区接入：
+当前阶段只验证插件骨架、PDF 阅读器选区接入和浮窗 UI 基础：
 
 - 能被 Zotero 7 安装。
 - 能执行 bootstrap 生命周期。
 - 能加载根目录 `prefs.js` 默认偏好。
 - 能通过脚本打包为 `.xpi`。
-- 能在 PDF 文本选区弹窗中追加临时 AnnotAI 操作区。
+- 能在 PDF 文本选区弹窗内部接入 AnnotAI 操作区。
 - 能把选区快照写入 Debug Output。
+- 能打开、拖动、缩放和关闭翻译/解释/问答诊断小浮窗。
 
 当前阶段不包含：
 
 - AI Provider 配置。
 - 真实翻译、解释、问答请求。
-- 翻译、解释、问答浮窗。
 - 高亮和批注写入。
 - 设置页。
