@@ -193,7 +193,7 @@ var ZoteroAnnotAIFloatingPanel = {
       height: position.height,
       openCount: 1,
       upgradeCount: 0,
-      status: "阶段三：仅验证浮窗，不调用 AI",
+      status: "阶段四：Provider 请求层壳，浮窗暂不调用 AI",
     };
 
     closeButton.addEventListener("click", (event) => {

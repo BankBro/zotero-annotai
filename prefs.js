@@ -1,2 +1,10 @@
 pref("extensions.zoteroAnnotAI.enabled", true);
 pref("extensions.zoteroAnnotAI.lastLifecycleEvent", "");
+pref("extensions.zoteroAnnotAI.provider.type", "openai-compatible");
+pref("extensions.zoteroAnnotAI.provider.name", "Default OpenAI-compatible");
+pref("extensions.zoteroAnnotAI.provider.baseURL", "");
+pref("extensions.zoteroAnnotAI.provider.model", "");
+pref("extensions.zoteroAnnotAI.provider.apiKey", "");
+pref("extensions.zoteroAnnotAI.provider.timeoutMs", 30000);
+pref("extensions.zoteroAnnotAI.provider.enableStreaming", false);
+pref("extensions.zoteroAnnotAI.provider.lastTestStatus", "");

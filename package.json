@@ -1,6 +1,6 @@
 {
   "name": "zotero-annotai",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "private": true,
   "description": "AI-assisted reading and annotation workflow for Zotero.",
   "scripts": {
