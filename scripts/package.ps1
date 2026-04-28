@@ -17,7 +17,8 @@ $xpiPath = Join-Path $distFullPath "zotero-annotai-$version.xpi"
 $files = @(
     "manifest.json",
     "bootstrap.js",
-    "prefs.js"
+    "prefs.js",
+    "src/reader-selection.js"
 )
 
 foreach ($file in $files) {
