@@ -23,15 +23,22 @@ npm run package
 打包完成后会生成：
 
 ```text
-dist/zotero-annotai-0.1.12.xpi
+dist/zotero-annotai-0.1.13.xpi
 ```
 
-这个 `.xpi` 目前包含 Zotero 插件最小文件、阶段二选区验证脚本和阶段三浮窗脚本：
+这个 `.xpi` 目前包含 Zotero 插件最小文件、阶段二选区验证脚本、阶段三浮窗脚本和阶段四 Provider 请求层壳：
 
 ```text
 manifest.json
 bootstrap.js
 prefs.js
+preferences.xhtml
+preferences.css
+preferences.js
+src/provider-errors.js
+src/settings.js
+src/openai-compatible-client.js
+src/request-runner.js
 src/floating-panel.js
 src/reader-selection.js
 ```
@@ -61,7 +68,7 @@ Tools -> Add-ons -> 齿轮菜单 -> Install Add-on From File...
 选择：
 
 ```text
-dist/zotero-annotai-0.1.12.xpi
+dist/zotero-annotai-0.1.13.xpi
 ```
 
 ## 查看启动日志
@@ -75,7 +82,9 @@ Help -> Debug Output Logging -> View Output
 安装、启用或重启 Zotero 后，应看到类似日志：
 
 ```text
-[Zotero AnnotAI] Startup 0.1.12
+[Zotero AnnotAI] Startup 0.1.13
+[Zotero AnnotAI] Provider request runner initialized
+[Zotero AnnotAI] Preference pane registered
 [Zotero AnnotAI] Floating panel module initialized
 [Zotero AnnotAI] Reader selection listener registered
 ```
@@ -83,8 +92,8 @@ Help -> Debug Output Logging -> View Output
 禁用或卸载插件时，应看到类似：
 
 ```text
-[Zotero AnnotAI] Shutdown 0.1.12
-[Zotero AnnotAI] Uninstall 0.1.12
+[Zotero AnnotAI] Shutdown 0.1.13
+[Zotero AnnotAI] Uninstall 0.1.13
 ```
 
 ## 阶段二选区验证
@@ -129,9 +138,30 @@ AnnotAI | 翻译 | 解释 | 问答
 
 更完整的阶段三验收说明见 `docs/phase-3-floating-panel.md`。
 
+## 阶段四 Provider 请求层验证
+
+打开 Zotero 设置页中的 AnnotAI Provider 配置，填入：
+
+- OpenAI-compatible base URL，例如包含 `/v1` 的 API root。
+- 模型 ID。
+- API key。
+- 请求超时时间。
+
+点击 `保存配置` 后，配置会写入 `Zotero.Prefs`。点击 `连接测试` 后，插件只发送固定 ping prompt，不发送 PDF 选区文本。
+
+阶段四应支持：
+
+- 配置完整且 Provider 可用时显示连接测试成功。
+- 空 base URL 或空 model 时显示配置不完整。
+- 错误 API key 显示认证失败，不在日志或状态里输出 key。
+- 错误 endpoint、网络失败、超时和限流错误有可理解提示。
+- `取消测试` 可以中断正在进行的连接测试。
+
+更完整的阶段四验收说明见 `docs/phase-4-provider-request.md`。
+
 ## 当前阶段边界
 
-当前阶段只验证插件骨架、PDF 阅读器选区接入和浮窗 UI 基础：
+当前阶段验证插件骨架、PDF 阅读器选区接入、浮窗 UI 基础和 Provider 请求层壳：
 
 - 能被 Zotero 7 安装。
 - 能执行 bootstrap 生命周期。
@@ -140,10 +170,11 @@ AnnotAI | 翻译 | 解释 | 问答
 - 能在 PDF 文本选区弹窗内部接入 AnnotAI 操作区。
 - 能把选区快照写入 Debug Output。
 - 能打开、拖动、缩放和关闭翻译/解释/问答诊断小浮窗。
+- 能在 Zotero 设置页配置单个 OpenAI-compatible Provider。
+- 能保存 Provider 配置并执行连接测试。
+- 能分类认证、限流、模型、网络、超时和响应格式错误。
 
 当前阶段不包含：
 
-- AI Provider 配置。
 - 真实翻译、解释、问答请求。
 - 高亮和批注写入。
-- 设置页。

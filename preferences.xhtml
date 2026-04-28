@@ -1,0 +1,54 @@
+<vbox
+  id="zotero-annotai-preferences"
+  onload="ZoteroAnnotAIPreferences.init(event)"
+>
+  <groupbox class="zotero-annotai-prefs">
+    <label><html:h2>AnnotAI Provider</html:h2></label>
+    <html:p class="zotero-annotai-prefs-note">
+      阶段四只配置一个默认 OpenAI-compatible Provider。连接测试只发送固定 ping prompt，不发送 PDF 选区文本。
+    </html:p>
+
+    <html:div class="zotero-annotai-prefs-grid">
+      <html:label for="zotero-annotai-provider-name">名称</html:label>
+      <html:input id="zotero-annotai-provider-name" type="text" autocomplete="off" />
+
+      <html:label for="zotero-annotai-provider-base-url">Base URL</html:label>
+      <html:input
+        id="zotero-annotai-provider-base-url"
+        type="url"
+        autocomplete="off"
+        placeholder="https://api.openai.com/v1"
+      />
+
+      <html:label for="zotero-annotai-provider-model">模型</html:label>
+      <html:input id="zotero-annotai-provider-model" type="text" autocomplete="off" placeholder="gpt-4o-mini" />
+
+      <html:label for="zotero-annotai-provider-api-key">API key</html:label>
+      <html:input id="zotero-annotai-provider-api-key" type="password" autocomplete="off" />
+
+      <html:label for="zotero-annotai-provider-timeout">超时</html:label>
+      <html:div class="zotero-annotai-prefs-inline">
+        <html:input id="zotero-annotai-provider-timeout" type="text" inputmode="numeric" autocomplete="off" />
+        <html:span>毫秒</html:span>
+      </html:div>
+
+      <html:span></html:span>
+      <html:label class="zotero-annotai-prefs-check">
+        <html:input id="zotero-annotai-provider-streaming" type="checkbox" disabled="disabled" />
+        <html:span>Provider 支持流式输出（后续版本自动检测）</html:span>
+      </html:label>
+    </html:div>
+
+    <html:p class="zotero-annotai-prefs-warning">
+      当前阶段 API key 明文存储在 Zotero preferences 中。日志和诊断会脱敏，但本阶段还不使用系统密钥链。
+    </html:p>
+
+    <html:div class="zotero-annotai-prefs-actions">
+      <html:button id="zotero-annotai-provider-save" type="button">保存配置</html:button>
+      <html:button id="zotero-annotai-provider-test" type="button">连接测试</html:button>
+      <html:button id="zotero-annotai-provider-cancel" type="button" disabled="disabled">取消测试</html:button>
+    </html:div>
+
+    <html:div id="zotero-annotai-provider-status" class="zotero-annotai-prefs-status" role="status"></html:div>
+  </groupbox>
+</vbox>

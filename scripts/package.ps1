@@ -18,6 +18,13 @@ $files = @(
     "manifest.json",
     "bootstrap.js",
     "prefs.js",
+    "preferences.xhtml",
+    "preferences.css",
+    "preferences.js",
+    "src/provider-errors.js",
+    "src/settings.js",
+    "src/openai-compatible-client.js",
+    "src/request-runner.js",
     "src/floating-panel.js",
     "src/reader-selection.js"
 )

@@ -249,6 +249,8 @@ interface AnnotationRequest {
 
 ## 5. Provider 请求层
 
+当前阶段四实现的是 Provider 请求层壳：单个默认 OpenAI-compatible Provider、设置页、连接测试、请求超时/取消和错误分类。真实翻译、解释、问答浮窗暂不调用这个请求层。
+
 ### 5.1 职责
 
 Provider 请求层需要：
@@ -261,6 +263,18 @@ Provider 请求层需要：
 - 分类 Provider 错误。
 - 对瞬时错误进行重试。
 - 从日志中移除敏感信息。
+
+阶段四已落地的文件：
+
+```text
+src/provider-errors.js
+src/settings.js
+src/openai-compatible-client.js
+src/request-runner.js
+preferences.xhtml
+preferences.js
+preferences.css
+```
 
 ### 5.2 请求流程
 
