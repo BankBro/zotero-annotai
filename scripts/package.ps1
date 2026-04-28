@@ -18,6 +18,7 @@ $files = @(
     "manifest.json",
     "bootstrap.js",
     "prefs.js",
+    "src/floating-panel.js",
     "src/reader-selection.js"
 )
 

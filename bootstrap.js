@@ -23,14 +23,29 @@ var ZoteroAnnotAI = {
       Zotero.logError(error);
       this.log(`Reader selection shutdown failed: ${error.message}`);
     }
+
+    try {
+      if (typeof ZoteroAnnotAIFloatingPanel !== "undefined") {
+        ZoteroAnnotAIFloatingPanel.shutdown();
+      }
+    }
+    catch (error) {
+      Zotero.logError(error);
+      this.log(`Floating panel shutdown failed: ${error.message}`);
+    }
   },
 
   initSelectionIntegration() {
     this.shutdownSelectionIntegration();
+    this.loadScript("src/floating-panel.js");
     this.loadScript("src/reader-selection.js");
+    ZoteroAnnotAIFloatingPanel.init({
+      log: this.log.bind(this),
+    });
     ZoteroAnnotAIReaderSelection.init({
       pluginID: this.id,
       log: this.log.bind(this),
+      floatingPanel: ZoteroAnnotAIFloatingPanel,
     });
   },
 
