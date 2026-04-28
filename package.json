@@ -1,0 +1,12 @@
+{
+  "name": "zotero-annotai",
+  "version": "0.1.1",
+  "private": true,
+  "description": "AI-assisted reading and annotation workflow for Zotero.",
+  "scripts": {
+    "package": "powershell.exe -NoProfile -File scripts/package.ps1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
