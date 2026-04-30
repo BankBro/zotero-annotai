@@ -19,10 +19,11 @@ var ZoteroAnnotAIAnnotationWriter = {
   },
 
   async writeTranslationComment({ reader, snapshot, text } = {}) {
-    const comment = this.normalizeComment(text);
-    if (!comment) {
+    const plainComment = this.normalizeComment(text);
+    if (!plainComment) {
       throw this.createUserError("EMPTY_COMMENT", "没有可写入的翻译结果。");
     }
+    const comment = this.formatCommentForZotero(plainComment);
 
     const attachment = this.getAttachmentItem(reader, snapshot);
     if (!attachment) {
@@ -64,6 +65,16 @@ var ZoteroAnnotAIAnnotationWriter = {
 
   normalizeComment(value) {
     return typeof value === "string" ? value.trim() : "";
+  },
+
+  formatCommentForZotero(text) {
+    return String(text || "")
+      .split(/\r?\n/)
+      .map((line) => line.replace(
+        /^(\s*)(注音|本文义|常用义|语境说明|译文)([：:])(\s*)/,
+        "$1<b>$2$3</b>$4"
+      ))
+      .join("\n");
   },
 
   getAttachmentItem(reader, snapshot) {
