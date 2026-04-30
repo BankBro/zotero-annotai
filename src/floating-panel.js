@@ -627,7 +627,6 @@ var ZoteroAnnotAIFloatingPanel = {
       label.style.cssText = "font-weight:600;color:#3c4043";
 
       const result = panel.doc.createElement("div");
-      result.textContent = translation.result || "";
       result.style.cssText = [
         "box-sizing:border-box",
         "padding:10px",
@@ -638,6 +637,7 @@ var ZoteroAnnotAIFloatingPanel = {
         "word-break:break-word",
         "line-height:1.55",
       ].join(";");
+      this.renderFormattedTranslationResult(panel, result, translation.result || "");
 
       const meta = panel.doc.createElement("div");
       meta.textContent = [
@@ -671,6 +671,63 @@ var ZoteroAnnotAIFloatingPanel = {
     idle.style.cssText = "color:#5f6368";
     section.append(idle);
     return section;
+  },
+
+  renderFormattedTranslationResult(panel, container, text) {
+    const lines = String(text || "").split(/\r?\n/);
+    lines.forEach((line, index) => {
+      if (index > 0) {
+        container.append(panel.doc.createElement("br"));
+      }
+      this.appendFormattedTranslationLine(panel, container, line);
+    });
+  },
+
+  appendFormattedTranslationLine(panel, container, line) {
+    const text = String(line);
+    const fieldMatch = text.match(/^(\s*)((?:注音|音标|本文义|常用义|译文|语境说明)(?:[（(][^）)\n]{1,24}[）)])?[：:])(\s*)/);
+    if (!fieldMatch) {
+      this.appendFormattedTranslationText(panel, container, text);
+      return;
+    }
+
+    const [, leadingSpace, label, spacing] = fieldMatch;
+    if (leadingSpace) {
+      container.append(panel.doc.createTextNode(leadingSpace));
+    }
+
+    const strong = panel.doc.createElement("strong");
+    strong.textContent = label;
+    strong.style.cssText = "font-weight:700";
+
+    container.append(strong);
+    if (spacing) {
+      container.append(panel.doc.createTextNode(spacing));
+    }
+    this.appendFormattedTranslationText(panel, container, text.slice(fieldMatch[0].length));
+  },
+
+  appendFormattedTranslationText(panel, container, text) {
+    const match = String(text).match(/^(\s*)((?:n|v|vt|vi|adj|adv|prep|conj|pron|num|art|interj|aux|abbr)\.)(\s*)/i);
+    if (!match) {
+      container.append(panel.doc.createTextNode(text));
+      return;
+    }
+
+    const [, leadingSpace, partOfSpeech, spacing] = match;
+    if (leadingSpace) {
+      container.append(panel.doc.createTextNode(leadingSpace));
+    }
+
+    const strong = panel.doc.createElement("strong");
+    strong.textContent = partOfSpeech;
+    strong.style.cssText = "font-weight:700";
+
+    container.append(strong);
+    if (spacing) {
+      container.append(panel.doc.createTextNode(spacing));
+    }
+    container.append(panel.doc.createTextNode(String(text).slice(match[0].length)));
   },
 
   createTranslateActions(panel) {
