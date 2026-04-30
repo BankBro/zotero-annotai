@@ -295,8 +295,20 @@ var ZoteroAnnotAIReaderSelection = {
     if (["string", "number", "boolean"].includes(typeof value)) {
       return value;
     }
+    if (typeof value === "object") {
+      try {
+        return JSON.parse(JSON.stringify(value));
+      }
+      catch {
+        // Fall through to a manual clone for simple cross-compartment objects.
+      }
+    }
     if (Array.isArray(value)) {
-      return value.map((item) => this.clonePlainValue(item));
+      const clone = [];
+      for (let index = 0; index < value.length; index += 1) {
+        clone.push(this.clonePlainValue(value[index]));
+      }
+      return clone;
     }
     if (typeof value === "object") {
       const clone = {};

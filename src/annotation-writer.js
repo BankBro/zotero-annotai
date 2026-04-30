@@ -47,7 +47,7 @@ var ZoteroAnnotAIAnnotationWriter = {
       throw this.createUserError("NO_DRAFT", "当前选区无法写入批注，请重新选择文本后再试。");
     }
 
-    if (!Zotero.Annotations?.saveFromJSON) {
+    if (!Zotero.Item) {
       throw this.createUserError("READER_UNAVAILABLE", "当前 Zotero Reader 不支持写入批注。");
     }
 
@@ -171,47 +171,46 @@ var ZoteroAnnotAIAnnotationWriter = {
       throw this.createUserError("NOT_EDITABLE", "当前批注不可编辑，无法写入翻译结果。");
     }
 
-    const notifierQueue = this.createNotifierQueue();
     try {
       item.annotationComment = comment;
-      await item.saveTx(this.createSaveOptions(reader, notifierQueue));
+      await item.saveTx();
       return item;
     }
     catch (error) {
       throw this.wrapSaveError(error);
     }
-    finally {
-      await this.commitNotifierQueue(notifierQueue);
-    }
   },
 
   async createAnnotationFromDraft(attachment, draft, snapshot, comment, reader) {
     const options = this.getAnnotationOptions("translate");
-    const json = {
-      key: this.generateAnnotationKey(),
-      type: options.type,
-      color: options.color,
-      pageLabel: typeof draft.pageLabel === "string" ? draft.pageLabel : "",
-      sortIndex: draft.sortIndex,
-      position: this.clonePlainValue(draft.position),
-      text: typeof draft.text === "string" && draft.text ? draft.text : String(snapshot?.selectedText || ""),
-      comment,
-      tags: this.normalizeTags(draft.tags),
-    };
+    const item = new Zotero.Item("annotation");
+    item.libraryID = attachment.libraryID;
+    item.key = this.generateAnnotationKey();
 
-    const notifierQueue = this.createNotifierQueue();
     try {
-      return await Zotero.Annotations.saveFromJSON(
-        attachment,
-        json,
-        this.createSaveOptions(reader, notifierQueue)
-      );
+      await item.loadPrimaryData();
+      item.parentID = attachment.id;
+      item._requireData("annotation");
+      item._requireData("annotationDeferred");
+      item.annotationType = options.type;
+      item.annotationAuthorName = "";
+      if (["highlight", "underline"].includes(options.type)) {
+        item.annotationText = typeof draft.text === "string" && draft.text
+          ? draft.text
+          : String(snapshot?.selectedText || "");
+      }
+      item.annotationIsExternal = false;
+      item.annotationComment = comment;
+      item.annotationColor = options.color;
+      item.annotationPageLabel = typeof draft.pageLabel === "string" ? draft.pageLabel : "";
+      item.annotationSortIndex = draft.sortIndex;
+      item.annotationPosition = JSON.stringify(this.clonePlainValue(draft.position));
+      item.setTags(this.normalizeTags(draft.tags));
+      await item.saveTx();
+      return item;
     }
     catch (error) {
       throw this.wrapSaveError(error);
-    }
-    finally {
-      await this.commitNotifierQueue(notifierQueue);
     }
   },
 
@@ -238,58 +237,16 @@ var ZoteroAnnotAIAnnotationWriter = {
       return [];
     }
 
-    return tags
-      .map((tag) => {
-        if (typeof tag === "string") {
-          return { name: tag };
-        }
-        if (typeof tag?.name === "string") {
-          return { name: tag.name };
-        }
-        return null;
-      })
-      .filter(Boolean);
-  },
-
-  createSaveOptions(reader, notifierQueue) {
-    const notifierData = {};
-    if (reader?._instanceID) {
-      notifierData.instanceID = reader._instanceID;
+    const normalized = [];
+    for (let tag of tags) {
+      if (typeof tag === "string") {
+        normalized.push({ tag });
+      }
+      else if (typeof tag?.name === "string") {
+        normalized.push({ tag: tag.name });
+      }
     }
-    if (Zotero.Notes?.AUTO_SYNC_DELAY) {
-      notifierData.autoSyncDelay = Zotero.Notes.AUTO_SYNC_DELAY;
-    }
-
-    const options = {
-      skipSelect: true,
-      notifierData,
-    };
-    if (notifierQueue) {
-      options.notifierQueue = notifierQueue;
-    }
-    return options;
-  },
-
-  createNotifierQueue() {
-    try {
-      return Zotero.Notifier?.Queue ? new Zotero.Notifier.Queue() : null;
-    }
-    catch {
-      return null;
-    }
-  },
-
-  async commitNotifierQueue(notifierQueue) {
-    if (!notifierQueue || !Zotero.Notifier?.commit) {
-      return;
-    }
-
-    try {
-      await Zotero.Notifier.commit(notifierQueue);
-    }
-    catch (error) {
-      this.log?.(`Annotation notifier commit failed: ${this.sanitizeMessage(error.message)}`);
-    }
+    return normalized;
   },
 
   async syncReaderAnnotation(reader, item) {
@@ -327,8 +284,20 @@ var ZoteroAnnotAIAnnotationWriter = {
     if (["string", "number", "boolean"].includes(typeof value)) {
       return value;
     }
+    if (typeof value === "object") {
+      try {
+        return JSON.parse(JSON.stringify(value));
+      }
+      catch {
+        // Fall through to a manual clone for simple cross-compartment objects.
+      }
+    }
     if (Array.isArray(value)) {
-      return value.map((item) => this.clonePlainValue(item));
+      const clone = [];
+      for (let index = 0; index < value.length; index += 1) {
+        clone.push(this.clonePlainValue(value[index]));
+      }
+      return clone;
     }
     if (typeof value === "object") {
       const clone = {};
