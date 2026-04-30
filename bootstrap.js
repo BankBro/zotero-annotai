@@ -78,10 +78,15 @@ var ZoteroAnnotAI = {
 
   initSelectionIntegration() {
     this.shutdownSelectionIntegration();
+    this.loadScript("src/translation-task.js");
     this.loadScript("src/floating-panel.js");
     this.loadScript("src/reader-selection.js");
     ZoteroAnnotAIFloatingPanel.init({
       log: this.log.bind(this),
+      requestRunner: typeof ZoteroAnnotAIRequestRunner !== "undefined" ? ZoteroAnnotAIRequestRunner : null,
+      settings: typeof ZoteroAnnotAISettings !== "undefined" ? ZoteroAnnotAISettings : null,
+      errors: typeof ZoteroAnnotAIProviderErrors !== "undefined" ? ZoteroAnnotAIProviderErrors : null,
+      translationTask: typeof ZoteroAnnotAITranslationTask !== "undefined" ? ZoteroAnnotAITranslationTask : null,
     });
     ZoteroAnnotAIReaderSelection.init({
       pluginID: this.id,

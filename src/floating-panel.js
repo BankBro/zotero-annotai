@@ -3,13 +3,21 @@ var ZoteroAnnotAIFloatingPanel = {
   nextPanelID: 1,
   nextZIndex: 10000,
   log: null,
+  requestRunner: null,
+  settings: null,
+  errors: null,
+  translationTask: null,
   minWidth: 280,
   minHeight: 180,
   toastDocs: [],
 
-  init({ log } = {}) {
+  init({ log, requestRunner, settings, errors, translationTask } = {}) {
     this.shutdown();
     this.log = log || ((message) => Zotero.debug(`[Zotero AnnotAI] ${message}`));
+    this.requestRunner = requestRunner || null;
+    this.settings = settings || null;
+    this.errors = errors || null;
+    this.translationTask = translationTask || null;
     this.log("Floating panel module initialized");
   },
 
@@ -23,6 +31,10 @@ var ZoteroAnnotAIFloatingPanel = {
     this.panels = [];
     this.toastDocs = [];
     this.log = null;
+    this.requestRunner = null;
+    this.settings = null;
+    this.errors = null;
+    this.translationTask = null;
   },
 
   open({ action, label, doc, reader, snapshot, anchorElement }) {
@@ -39,7 +51,12 @@ var ZoteroAnnotAIFloatingPanel = {
     const panel = this.createPanelRecord({ action, label, doc, reader, snapshot, anchorElement });
     this.panels.push(panel);
     doc.body.append(panel.node);
-    this.renderPanel(panel);
+    if (action === "translate") {
+      this.startTranslationRequest(panel, snapshot, { reason: "open" });
+    }
+    else {
+      this.renderPanel(panel);
+    }
     this.bringToFront(panel);
     this.log?.(`Floating panel opened action=${action} panelID=${panel.id}`);
 
@@ -51,8 +68,13 @@ var ZoteroAnnotAIFloatingPanel = {
   handleExistingPanel(panel, snapshot) {
     panel.openCount += 1;
     this.bringToFront(panel);
-    panel.snapshot = snapshot;
     panel.upgradeCount += 1;
+
+    if (panel.action === "translate") {
+      return this.handleTranslatePanelUpdate(panel, snapshot);
+    }
+
+    panel.snapshot = snapshot;
 
     if (panel.action === "qa") {
       this.renderPanel(panel);
@@ -193,7 +215,10 @@ var ZoteroAnnotAIFloatingPanel = {
       height: position.height,
       openCount: 1,
       upgradeCount: 0,
-      status: "阶段四：Provider 请求层壳，浮窗暂不调用 AI",
+      status: action === "translate"
+        ? "阶段五：翻译浮窗已接入 Provider 输出"
+        : "阶段四：Provider 请求层壳，浮窗暂不调用 AI",
+      translation: action === "translate" ? this.createTranslationState() : null,
     };
 
     closeButton.addEventListener("click", (event) => {
@@ -274,7 +299,228 @@ var ZoteroAnnotAIFloatingPanel = {
     panel.node.style.height = `${panel.height}px`;
   },
 
+  createTranslationState() {
+    return {
+      status: "idle",
+      requestID: 0,
+      activeRequestID: null,
+      fingerprint: "",
+      controller: null,
+      result: null,
+      error: null,
+      elapsedMs: null,
+      model: "",
+      startedAt: null,
+      staleRequestID: null,
+      staleReason: "",
+    };
+  },
+
+  handleTranslatePanelUpdate(panel, snapshot) {
+    const nextFingerprint = this.getTranslationFingerprint(snapshot);
+    const isLoading = this.isTranslationLoading(panel);
+
+    if (isLoading && nextFingerprint === panel.translation.fingerprint) {
+      this.flashPanel(panel);
+      this.log?.(`Translate request duplicate discarded panelID=${panel.id} requestID=${panel.translation.activeRequestID}`);
+      const message = "翻译请求仍在进行，等待当前请求返回";
+      this.showToast(panel.doc, message);
+      return { message };
+    }
+
+    if (isLoading) {
+      this.markTranslationRequestStale(panel, "new-selection");
+    }
+
+    panel.snapshot = snapshot;
+    this.startTranslationRequest(panel, snapshot, { reason: "selection-update" });
+    this.flashPanel(panel);
+
+    const message = "已切换到新选区并重新翻译";
+    this.showToast(panel.doc, message);
+    return { message };
+  },
+
+  async startTranslationRequest(panel, snapshot, { reason } = { reason: "request" }) {
+    const translation = panel.translation || this.createTranslationState();
+    panel.translation = translation;
+
+    const requestID = translation.requestID + 1;
+    const fingerprint = this.getTranslationFingerprint(snapshot);
+    const startedAt = Date.now();
+
+    panel.snapshot = snapshot;
+    Object.assign(translation, {
+      status: "loading",
+      requestID,
+      activeRequestID: requestID,
+      fingerprint,
+      controller: null,
+      result: null,
+      error: null,
+      elapsedMs: null,
+      model: "",
+      startedAt,
+    });
+    this.renderPanel(panel);
+
+    try {
+      const controller = this.createAbortController(panel.doc);
+      translation.controller = controller;
+
+      if (!this.requestRunner || !this.settings || !this.translationTask) {
+        throw this.createProviderUnavailableError();
+      }
+
+      const provider = this.settings.getActiveProvider();
+      const messages = this.translationTask.createMessages(snapshot, { targetLanguage: "中文" });
+      this.log?.(
+        `Translate request started panelID=${panel.id} requestID=${requestID} reason=${reason} ` +
+        `${JSON.stringify(this.translationTask.createSafeLogPayload(snapshot))}`
+      );
+
+      const result = await this.requestRunner.runChat({
+        provider,
+        messages,
+        timeoutMs: provider.timeoutMs,
+        signal: controller.signal,
+      });
+
+      if (!this.isActiveTranslationRequest(panel, requestID, fingerprint)) {
+        this.log?.(`Translate stale result discarded panelID=${panel.id} requestID=${requestID}`);
+        return;
+      }
+
+      const elapsedMs = Date.now() - startedAt;
+      Object.assign(translation, {
+        status: "success",
+        activeRequestID: null,
+        controller: null,
+        result: result.content,
+        error: null,
+        elapsedMs,
+        model: result.model || provider.model || "",
+      });
+      this.renderPanel(panel);
+      this.log?.(`Translate request succeeded panelID=${panel.id} requestID=${requestID} model=${translation.model} elapsedMs=${elapsedMs}`);
+    }
+    catch (error) {
+      const normalized = this.normalizeTranslationError(error);
+
+      if (!this.isActiveTranslationRequest(panel, requestID, fingerprint)) {
+        this.log?.(`Translate stale error discarded panelID=${panel.id} requestID=${requestID} error=${normalized.name}`);
+        return;
+      }
+
+      Object.assign(translation, {
+        status: normalized.name === "TimeoutError" ? "timeout" : "error",
+        activeRequestID: null,
+        controller: null,
+        result: null,
+        error: normalized,
+        elapsedMs: Date.now() - startedAt,
+        model: "",
+      });
+      this.renderPanel(panel);
+      this.log?.(`Translate request failed panelID=${panel.id} requestID=${requestID} error=${normalized.name} elapsedMs=${translation.elapsedMs}`);
+    }
+  },
+
+  createAbortController(doc) {
+    const win = doc?.defaultView;
+    if (win?.AbortController) {
+      return new win.AbortController();
+    }
+
+    if (typeof AbortController !== "undefined") {
+      return new AbortController();
+    }
+
+    const mainWindow = typeof Zotero !== "undefined" && Zotero.getMainWindow?.();
+    if (mainWindow?.AbortController) {
+      return new mainWindow.AbortController();
+    }
+
+    const hiddenWindow = typeof Services !== "undefined" && Services.appShell?.hiddenDOMWindow;
+    if (hiddenWindow?.AbortController) {
+      return new hiddenWindow.AbortController();
+    }
+
+    throw this.createProviderUnavailableError("AbortController 不可用");
+  },
+
+  markTranslationRequestStale(panel, reason) {
+    const translation = panel.translation;
+    if (!translation?.controller) {
+      return;
+    }
+
+    const requestID = translation.activeRequestID;
+    translation.staleRequestID = requestID;
+    translation.staleReason = reason;
+    try {
+      translation.controller.abort();
+    }
+    catch (error) {
+      this.log?.(`Translate request abort failed panelID=${panel.id} requestID=${requestID} message=${error.message}`);
+    }
+    this.log?.(`Translate request marked stale panelID=${panel.id} requestID=${requestID} reason=${reason}`);
+  },
+
+  isTranslationLoading(panel) {
+    return Boolean(panel.translation?.status === "loading" && panel.translation.activeRequestID !== null);
+  },
+
+  isActiveTranslationRequest(panel, requestID, fingerprint) {
+    return Boolean(
+      panel.node?.isConnected
+      && panel.translation?.activeRequestID === requestID
+      && panel.translation?.fingerprint === fingerprint
+    );
+  },
+
+  getTranslationFingerprint(snapshot) {
+    if (this.translationTask?.createSelectionFingerprint) {
+      return this.translationTask.createSelectionFingerprint(snapshot);
+    }
+
+    return [
+      String(snapshot?.selectedText || "").trim().replace(/\s+/g, " "),
+      Number.isInteger(snapshot?.attachmentItemID) ? String(snapshot.attachmentItemID) : "",
+      String(snapshot?.title || "").trim().replace(/\s+/g, " "),
+    ].join("\u001f");
+  },
+
+  createProviderUnavailableError(message = "Provider 请求层不可用") {
+    if (this.errors?.MissingConfigError) {
+      return new this.errors.MissingConfigError(message);
+    }
+
+    const error = new Error(message);
+    error.name = "MissingConfigError";
+    return error;
+  },
+
+  normalizeTranslationError(error) {
+    if (this.errors?.ProviderError && error instanceof this.errors.ProviderError) {
+      return error;
+    }
+
+    if (error?.name) {
+      return error;
+    }
+
+    const normalized = new Error(error?.message || "Provider 请求失败");
+    normalized.name = "ProviderHTTPError";
+    return normalized;
+  },
+
   renderPanel(panel) {
+    if (panel.action === "translate") {
+      this.renderTranslatePanel(panel);
+      return;
+    }
+
     panel.title.textContent = `AnnotAI · ${panel.label}`;
     panel.content.replaceChildren();
 
@@ -291,6 +537,254 @@ var ZoteroAnnotAIFloatingPanel = {
     panel.content.append(pre);
     panel.footer.textContent = panel.status;
     this.applyGeometry(panel);
+  },
+
+  renderTranslatePanel(panel) {
+    const translation = panel.translation || this.createTranslationState();
+    panel.translation = translation;
+    panel.title.textContent = `AnnotAI · ${panel.label}`;
+    panel.content.replaceChildren();
+
+    const wrapper = panel.doc.createElement("div");
+    wrapper.style.cssText = [
+      "display:flex",
+      "flex-direction:column",
+      "gap:10px",
+      "min-height:100%",
+    ].join(";");
+
+    wrapper.append(
+      this.createTranslateSourceBlock(panel),
+      this.createTranslateStateBlock(panel)
+    );
+
+    const actions = this.createTranslateActions(panel);
+    if (actions) {
+      wrapper.append(actions);
+    }
+
+    panel.content.append(wrapper);
+    panel.footer.textContent = this.getTranslateFooterText(panel);
+    this.applyGeometry(panel);
+  },
+
+  createTranslateSourceBlock(panel) {
+    const section = panel.doc.createElement("section");
+    section.style.cssText = [
+      "box-sizing:border-box",
+      "padding:8px 10px",
+      "border:1px solid rgba(0,0,0,0.1)",
+      "border-radius:6px",
+      "background:#f8f9fa",
+    ].join(";");
+
+    const label = panel.doc.createElement("div");
+    label.textContent = "原文";
+    label.style.cssText = "font-weight:600;margin-bottom:6px;color:#3c4043";
+
+    const text = panel.doc.createElement("div");
+    text.textContent = panel.snapshot?.selectedText || "";
+    text.style.cssText = [
+      "white-space:pre-wrap",
+      "word-break:break-word",
+      "line-height:1.5",
+      "max-height:96px",
+      "overflow:auto",
+    ].join(";");
+
+    section.append(label, text);
+    return section;
+  },
+
+  createTranslateStateBlock(panel) {
+    const translation = panel.translation || {};
+    const section = panel.doc.createElement("section");
+    section.style.cssText = [
+      "box-sizing:border-box",
+      "display:flex",
+      "flex-direction:column",
+      "gap:8px",
+      "min-height:72px",
+    ].join(";");
+
+    if (translation.status === "loading") {
+      const loading = panel.doc.createElement("div");
+      loading.textContent = "正在翻译...";
+      loading.style.cssText = [
+        "padding:10px",
+        "border-radius:6px",
+        "background:#e8f0fe",
+        "color:#174ea6",
+        "font-weight:600",
+      ].join(";");
+      section.append(loading);
+      return section;
+    }
+
+    if (translation.status === "success") {
+      const label = panel.doc.createElement("div");
+      label.textContent = "翻译结果";
+      label.style.cssText = "font-weight:600;color:#3c4043";
+
+      const result = panel.doc.createElement("div");
+      result.textContent = translation.result || "";
+      result.style.cssText = [
+        "box-sizing:border-box",
+        "padding:10px",
+        "border:1px solid rgba(0,0,0,0.1)",
+        "border-radius:6px",
+        "background:#fff",
+        "white-space:pre-wrap",
+        "word-break:break-word",
+        "line-height:1.55",
+      ].join(";");
+
+      const meta = panel.doc.createElement("div");
+      meta.textContent = [
+        translation.model ? `模型：${translation.model}` : "",
+        Number.isInteger(translation.elapsedMs) ? `耗时：${translation.elapsedMs}ms` : "",
+      ].filter(Boolean).join(" · ");
+      meta.style.cssText = "color:#5f6368;font-size:12px";
+
+      section.append(label, result, meta);
+      return section;
+    }
+
+    if (translation.status === "error" || translation.status === "timeout") {
+      const error = panel.doc.createElement("div");
+      error.textContent = this.getTranslationErrorMessage(translation.error);
+      error.style.cssText = [
+        "padding:10px",
+        "border-radius:6px",
+        "background:#fce8e6",
+        "color:#a50e0e",
+        "line-height:1.5",
+        "white-space:pre-wrap",
+        "word-break:break-word",
+      ].join(";");
+      section.append(error);
+      return section;
+    }
+
+    const idle = panel.doc.createElement("div");
+    idle.textContent = "等待翻译请求";
+    idle.style.cssText = "color:#5f6368";
+    section.append(idle);
+    return section;
+  },
+
+  createTranslateActions(panel) {
+    const status = panel.translation?.status;
+    if (!["success", "error", "timeout"].includes(status)) {
+      return null;
+    }
+
+    const actions = panel.doc.createElement("div");
+    actions.style.cssText = [
+      "display:flex",
+      "align-items:center",
+      "gap:8px",
+      "flex-wrap:wrap",
+    ].join(";");
+
+    if (status === "success") {
+      actions.append(
+        this.createPanelButton(panel, "复制", () => this.copyTranslationResult(panel)),
+        this.createPanelButton(panel, "重新翻译", () => this.startTranslationRequest(panel, panel.snapshot, { reason: "manual-retry" }))
+      );
+      return actions;
+    }
+
+    actions.append(
+      this.createPanelButton(panel, "重试", () => this.startTranslationRequest(panel, panel.snapshot, { reason: "manual-retry" }))
+    );
+    return actions;
+  },
+
+  createPanelButton(panel, label, onClick) {
+    const button = panel.doc.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.style.cssText = [
+      "border:1px solid rgba(0,0,0,0.2)",
+      "border-radius:4px",
+      "background:#fff",
+      "color:#1a73e8",
+      "padding:3px 8px",
+      "font:inherit",
+      "cursor:pointer",
+    ].join(";");
+
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onClick();
+    });
+    return button;
+  },
+
+  getTranslateFooterText(panel) {
+    const status = panel.translation?.status;
+    if (status === "loading") {
+      return "阶段五：正在调用 Provider 翻译，不写批注不高亮";
+    }
+    if (status === "success") {
+      return "阶段五：翻译完成，不写批注不高亮";
+    }
+    if (status === "timeout") {
+      return "阶段五：翻译请求超时";
+    }
+    if (status === "error") {
+      return "阶段五：翻译请求失败";
+    }
+    return panel.status;
+  },
+
+  getTranslationErrorMessage(error) {
+    if (this.errors?.toUserMessage) {
+      return this.errors.toUserMessage(error);
+    }
+
+    return error?.message || "Provider 请求失败";
+  },
+
+  copyTranslationResult(panel) {
+    const text = panel.translation?.result || "";
+    if (!text) {
+      this.showToast(panel.doc, "没有可复制的翻译结果");
+      return;
+    }
+
+    const result = this.copyText(panel, text);
+    if (result?.then) {
+      result
+        .then(() => this.showToast(panel.doc, "已复制翻译结果"))
+        .catch(() => this.showToast(panel.doc, "复制失败"));
+      return;
+    }
+
+    this.showToast(panel.doc, result ? "已复制翻译结果" : "复制失败");
+  },
+
+  copyText(panel, text) {
+    if (typeof Components !== "undefined") {
+      try {
+        const helper = Components.classes["@mozilla.org/widget/clipboardhelper;1"]
+          .getService(Components.interfaces.nsIClipboardHelper);
+        helper.copyString(text);
+        return true;
+      }
+      catch {
+        // Fall back to navigator.clipboard when the XPCOM helper is unavailable.
+      }
+    }
+
+    const clipboard = panel.doc.defaultView?.navigator?.clipboard;
+    if (clipboard?.writeText) {
+      return clipboard.writeText(text);
+    }
+
+    return false;
   },
 
   createDiagnosticPayload(panel) {
@@ -512,6 +1006,16 @@ var ZoteroAnnotAIFloatingPanel = {
   },
 
   removePanel(panel, { log } = { log: false }) {
+    if (panel.translation?.controller) {
+      try {
+        panel.translation.activeRequestID = null;
+        panel.translation.controller.abort();
+      }
+      catch (error) {
+        this.log?.(`Translate request abort on close failed panelID=${panel.id} message=${error.message}`);
+      }
+      panel.translation.controller = null;
+    }
     panel.node?.remove();
     this.panels = this.panels.filter((candidate) => candidate !== panel);
     if (log) {
