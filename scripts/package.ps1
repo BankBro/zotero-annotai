@@ -25,6 +25,7 @@ $files = @(
     "src/settings.js",
     "src/openai-compatible-client.js",
     "src/request-runner.js",
+    "src/translation-task.js",
     "src/floating-panel.js",
     "src/reader-selection.js"
 )

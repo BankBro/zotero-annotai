@@ -249,7 +249,7 @@ interface AnnotationRequest {
 
 ## 5. Provider 请求层
 
-当前阶段四实现的是 Provider 请求层壳：单个默认 OpenAI-compatible Provider、设置页、连接测试、请求超时/取消和错误分类。真实翻译、解释、问答浮窗暂不调用这个请求层。
+当前阶段五第一步已在 Provider 请求层壳上接入 `翻译` 浮窗：单个默认 OpenAI-compatible Provider、设置页、连接测试、请求超时/取消和错误分类继续保留，`翻译` 浮窗会调用请求层并显示真实输出。`解释` 和 `问答` 浮窗暂不调用这个请求层。
 
 ### 5.1 职责
 
@@ -271,6 +271,7 @@ src/provider-errors.js
 src/settings.js
 src/openai-compatible-client.js
 src/request-runner.js
+src/translation-task.js
 preferences.xhtml
 preferences.js
 preferences.css

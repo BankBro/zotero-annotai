@@ -69,7 +69,7 @@ var ZoteroAnnotAIRequestRunner = {
     this.validateMessages(messages);
 
     const timeout = Number.isInteger(timeoutMs) ? timeoutMs : safeProvider.timeoutMs;
-    const controller = new AbortController();
+    const controller = this.createAbortController();
     const startedAt = Date.now();
     let timedOut = false;
     let cancelled = false;
@@ -148,6 +148,24 @@ var ZoteroAnnotAIRequestRunner = {
       causeName: error?.name,
       causeMessage: this.errors.sanitizeMessage(error?.message),
     });
+  },
+
+  createAbortController() {
+    if (typeof AbortController !== "undefined") {
+      return new AbortController();
+    }
+
+    const mainWindow = typeof Zotero !== "undefined" && Zotero.getMainWindow?.();
+    if (mainWindow?.AbortController) {
+      return new mainWindow.AbortController();
+    }
+
+    const hiddenWindow = typeof Services !== "undefined" && Services.appShell?.hiddenDOMWindow;
+    if (hiddenWindow?.AbortController) {
+      return new hiddenWindow.AbortController();
+    }
+
+    throw new this.errors.NetworkError("AbortController is not available");
   },
 
   ensureInitialized() {

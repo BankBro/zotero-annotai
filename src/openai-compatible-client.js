@@ -21,12 +21,15 @@ var ZoteroAnnotAIOpenAICompatibleClient = {
     let responseText = "";
 
     try {
-      response = await fetch(url, {
+      response = await this.getFetch()(
+        url,
+        {
         method: "POST",
         headers,
         body,
         signal,
-      });
+        }
+      );
       responseText = await response.text();
     }
     catch (error) {
@@ -134,6 +137,25 @@ var ZoteroAnnotAIOpenAICompatibleClient = {
     }
 
     return "";
+  },
+
+  getFetch() {
+    if (typeof fetch === "function") {
+      return fetch.bind(globalThis);
+    }
+
+    const mainWindow = typeof Zotero !== "undefined" && Zotero.getMainWindow?.();
+    if (mainWindow?.fetch) {
+      return mainWindow.fetch.bind(mainWindow);
+    }
+
+    const hiddenWindow = typeof Services !== "undefined" && Services.appShell?.hiddenDOMWindow;
+    if (hiddenWindow?.fetch) {
+      return hiddenWindow.fetch.bind(hiddenWindow);
+    }
+
+    const Errors = this.getErrors();
+    throw new Errors.NetworkError("Fetch API is not available");
   },
 
   getErrors() {

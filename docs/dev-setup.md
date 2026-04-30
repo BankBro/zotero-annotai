@@ -23,10 +23,10 @@ npm run package
 打包完成后会生成：
 
 ```text
-dist/zotero-annotai-0.1.13.xpi
+dist/zotero-annotai-0.1.14.xpi
 ```
 
-这个 `.xpi` 目前包含 Zotero 插件最小文件、阶段二选区验证脚本、阶段三浮窗脚本和阶段四 Provider 请求层壳：
+这个 `.xpi` 目前包含 Zotero 插件最小文件、阶段二选区验证脚本、阶段三浮窗脚本、阶段四 Provider 请求层壳和阶段五翻译请求接入：
 
 ```text
 manifest.json
@@ -39,6 +39,7 @@ src/provider-errors.js
 src/settings.js
 src/openai-compatible-client.js
 src/request-runner.js
+src/translation-task.js
 src/floating-panel.js
 src/reader-selection.js
 ```
@@ -68,7 +69,7 @@ Tools -> Add-ons -> 齿轮菜单 -> Install Add-on From File...
 选择：
 
 ```text
-dist/zotero-annotai-0.1.13.xpi
+dist/zotero-annotai-0.1.14.xpi
 ```
 
 ## 查看启动日志
@@ -82,7 +83,7 @@ Help -> Debug Output Logging -> View Output
 安装、启用或重启 Zotero 后，应看到类似日志：
 
 ```text
-[Zotero AnnotAI] Startup 0.1.13
+[Zotero AnnotAI] Startup 0.1.14
 [Zotero AnnotAI] Provider request runner initialized
 [Zotero AnnotAI] Preference pane registered
 [Zotero AnnotAI] Floating panel module initialized
@@ -92,8 +93,8 @@ Help -> Debug Output Logging -> View Output
 禁用或卸载插件时，应看到类似：
 
 ```text
-[Zotero AnnotAI] Shutdown 0.1.13
-[Zotero AnnotAI] Uninstall 0.1.13
+[Zotero AnnotAI] Shutdown 0.1.14
+[Zotero AnnotAI] Uninstall 0.1.14
 ```
 
 ## 阶段二选区验证
@@ -159,9 +160,25 @@ AnnotAI | 翻译 | 解释 | 问答
 
 更完整的阶段四验收说明见 `docs/phase-4-provider-request.md`。
 
+## 阶段五第一步翻译验证
+
+在 Provider 配置可用后，打开 PDF，选中文本并点击 `翻译`。翻译浮窗应显示 `正在翻译...`，请求返回后显示真实 Provider 翻译结果、模型和耗时。
+
+阶段五第一步应支持：
+
+- `翻译` 浮窗真实调用 Provider。
+- 默认输出中文。
+- 请求只发送选中文本和论文标题、作者、日期等元数据。
+- 同一文本请求未返回时重复点击 `翻译` 不发送第二个请求。
+- 新文本请求会替换当前翻译浮窗内容，并丢弃旧请求结果。
+- `解释` 和 `问答` 仍为诊断壳。
+- 不创建高亮，不写入批注。
+
+更完整的阶段五验收说明见 `docs/phase-5-translation-provider-output.md`。
+
 ## 当前阶段边界
 
-当前阶段验证插件骨架、PDF 阅读器选区接入、浮窗 UI 基础和 Provider 请求层壳：
+当前阶段验证插件骨架、PDF 阅读器选区接入、浮窗 UI 基础、Provider 请求层壳和翻译浮窗真实 Provider 输出：
 
 - 能被 Zotero 7 安装。
 - 能执行 bootstrap 生命周期。
@@ -173,8 +190,10 @@ AnnotAI | 翻译 | 解释 | 问答
 - 能在 Zotero 设置页配置单个 OpenAI-compatible Provider。
 - 能保存 Provider 配置并执行连接测试。
 - 能分类认证、限流、模型、网络、超时和响应格式错误。
+- 能让 `翻译` 浮窗调用 Provider 并显示结果。
+- 能用 requestID 防止旧翻译结果覆盖新选区。
 
 当前阶段不包含：
 
-- 真实翻译、解释、问答请求。
+- 真实解释、问答请求。
 - 高亮和批注写入。
