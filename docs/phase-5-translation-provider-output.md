@@ -2,10 +2,12 @@
 
 阶段五第一步用于验证 Zotero AnnotAI 可以把 PDF 选区文本发送给已配置的 OpenAI-compatible Provider，并在 `翻译` 浮窗中显示真实结果。这个阶段仍不创建高亮、不写入批注，`解释` 和 `问答` 继续保持诊断壳。
 
+0.1.19 已进入阶段五第二步：翻译完成后可手动点击 `写入批注`，但翻译请求返回时仍不会自动写批注或自动高亮。第二步说明见 `docs/phase-5-translation-annotation-writeback.md`。
+
 ## 测试包
 
 ```text
-dist/zotero-annotai-0.1.14.xpi
+dist/zotero-annotai-0.1.19.xpi
 ```
 
 ## 翻译请求行为
@@ -26,8 +28,8 @@ dist/zotero-annotai-0.1.14.xpi
 
 ## 手动验收
 
-1. 安装 `dist/zotero-annotai-0.1.14.xpi` 并重启 Zotero。
-2. Debug Output 中确认出现 `Startup 0.1.14`。
+1. 安装 `dist/zotero-annotai-0.1.19.xpi` 并重启 Zotero。
+2. Debug Output 中确认出现 `Startup 0.1.19`。
 3. 在设置页保存可用的 OpenAI-compatible Provider，并确认连接测试成功。
 4. 打开 PDF，选中文本，点击 `翻译`。
 5. 翻译浮窗应显示 `正在翻译...`，随后显示真实翻译结果、模型和耗时。

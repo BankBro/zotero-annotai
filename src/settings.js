@@ -13,6 +13,21 @@ var ZoteroAnnotAISettings = {
     lastTestStatus: "",
   },
 
+  annotationDefaults: {
+    translate: {
+      type: "highlight",
+      color: "#e56eee",
+    },
+    explain: {
+      type: "highlight",
+      color: "#5fb236",
+    },
+    qa: {
+      type: "highlight",
+      color: "#f19837",
+    },
+  },
+
   init({ log } = {}) {
     this.log = log || ((message) => Zotero.debug(`[Zotero AnnotAI] ${message}`));
   },
@@ -51,6 +66,50 @@ var ZoteroAnnotAISettings = {
 
   setLastTestStatus(status) {
     this.setPref("provider.lastTestStatus", String(status || ""));
+  },
+
+  getAnnotationOptions(action) {
+    const safeAction = this.normalizeAction(action);
+    const defaults = this.annotationDefaults[safeAction];
+    return this.normalizeAnnotationOptions(safeAction, {
+      type: this.getPref(`annotation.${safeAction}.type`, defaults.type),
+      color: this.getPref(`annotation.${safeAction}.color`, defaults.color),
+    });
+  },
+
+  saveAnnotationOptions(action, options) {
+    const safeAction = this.normalizeAction(action);
+    const normalized = this.normalizeAnnotationOptions(safeAction, options || {});
+    this.setPref(`annotation.${safeAction}.type`, normalized.type);
+    this.setPref(`annotation.${safeAction}.color`, normalized.color);
+    this.log?.(`Annotation settings saved action=${safeAction} type=${normalized.type} color=${normalized.color}`);
+    return normalized;
+  },
+
+  normalizeAction(action) {
+    if (["translate", "explain", "qa"].includes(action)) {
+      return action;
+    }
+    return "translate";
+  },
+
+  normalizeAnnotationOptions(action, options) {
+    const defaults = this.annotationDefaults[this.normalizeAction(action)];
+    const type = ["highlight", "underline"].includes(options?.type) ? options.type : defaults.type;
+    return {
+      type,
+      color: this.normalizeHexColor(options?.color) || defaults.color,
+    };
+  },
+
+  normalizeHexColor(value) {
+    const color = this.normalizeString(value);
+    if (!color) {
+      return "";
+    }
+
+    const normalized = color.startsWith("#") ? color : `#${color}`;
+    return /^#[0-9a-f]{6}$/i.test(normalized) ? normalized.toLowerCase() : "";
   },
 
   validateProvider(provider, { requireReady } = { requireReady: true }) {

@@ -35,6 +35,16 @@ var ZoteroAnnotAI = {
       Zotero.logError(error);
       this.log(`Floating panel shutdown failed: ${error.message}`);
     }
+
+    try {
+      if (typeof ZoteroAnnotAIAnnotationWriter !== "undefined") {
+        ZoteroAnnotAIAnnotationWriter.shutdown();
+      }
+    }
+    catch (error) {
+      Zotero.logError(error);
+      this.log(`Annotation writer shutdown failed: ${error.message}`);
+    }
   },
 
   shutdownProviderIntegration() {
@@ -78,15 +88,21 @@ var ZoteroAnnotAI = {
 
   initSelectionIntegration() {
     this.shutdownSelectionIntegration();
+    this.loadScript("src/annotation-writer.js");
     this.loadScript("src/translation-task.js");
     this.loadScript("src/floating-panel.js");
     this.loadScript("src/reader-selection.js");
+    ZoteroAnnotAIAnnotationWriter.init({
+      settings: typeof ZoteroAnnotAISettings !== "undefined" ? ZoteroAnnotAISettings : null,
+      log: this.log.bind(this),
+    });
     ZoteroAnnotAIFloatingPanel.init({
       log: this.log.bind(this),
       requestRunner: typeof ZoteroAnnotAIRequestRunner !== "undefined" ? ZoteroAnnotAIRequestRunner : null,
       settings: typeof ZoteroAnnotAISettings !== "undefined" ? ZoteroAnnotAISettings : null,
       errors: typeof ZoteroAnnotAIProviderErrors !== "undefined" ? ZoteroAnnotAIProviderErrors : null,
       translationTask: typeof ZoteroAnnotAITranslationTask !== "undefined" ? ZoteroAnnotAITranslationTask : null,
+      annotationWriter: ZoteroAnnotAIAnnotationWriter,
     });
     ZoteroAnnotAIReaderSelection.init({
       pluginID: this.id,

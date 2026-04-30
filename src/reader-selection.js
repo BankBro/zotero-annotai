@@ -164,6 +164,7 @@ var ZoteroAnnotAIReaderSelection = {
       creators: this.getCreators(metadataItem),
       date: this.getField(metadataItem, "date"),
       annotationKeys: this.getAnnotationKeys(annotation),
+      annotationDraft: this.createAnnotationDraft(annotation, selectedText),
       positionAvailable: this.hasSelectionPosition(annotation),
     };
   },
@@ -231,22 +232,82 @@ var ZoteroAnnotAIReaderSelection = {
     );
   },
 
+  createAnnotationDraft(annotation, selectedText) {
+    if (!annotation || typeof annotation !== "object") {
+      return null;
+    }
+
+    const draft = {};
+    for (let key of ["id", "key", "type", "color", "pageLabel", "sortIndex", "comment"]) {
+      if (annotation[key] !== undefined && annotation[key] !== null) {
+        draft[key] = this.clonePlainValue(annotation[key]);
+      }
+    }
+
+    draft.text = typeof annotation.text === "string" && annotation.text
+      ? annotation.text
+      : selectedText;
+
+    if (annotation.position) {
+      draft.position = this.clonePlainValue(annotation.position);
+    }
+    else if (annotation.rects || annotation.pageIndex !== undefined) {
+      draft.position = {};
+      if (annotation.pageIndex !== undefined) {
+        draft.position.pageIndex = this.clonePlainValue(annotation.pageIndex);
+      }
+      if (annotation.rects) {
+        draft.position.rects = this.clonePlainValue(annotation.rects);
+      }
+      if (annotation.nextPageRects) {
+        draft.position.nextPageRects = this.clonePlainValue(annotation.nextPageRects);
+      }
+    }
+    if (Array.isArray(annotation.tags)) {
+      draft.tags = this.clonePlainValue(annotation.tags);
+    }
+
+    return Object.keys(draft).length ? draft : null;
+  },
+
   logSelectionSnapshot(snapshot) {
     const payload = {
       action: snapshot.action,
       charCount: snapshot.charCount,
-      selectedTextPreview: this.truncate(snapshot.selectedText, 240),
       readerType: snapshot.readerType,
       attachmentItemID: snapshot.attachmentItemID,
       parentItemID: snapshot.parentItemID,
-      title: this.truncate(snapshot.title, 120),
-      creators: snapshot.creators,
-      date: snapshot.date,
-      annotationKeys: snapshot.annotationKeys,
+      hasTitle: Boolean(snapshot.title),
+      creatorCount: Array.isArray(snapshot.creators) ? snapshot.creators.length : 0,
+      hasDate: Boolean(snapshot.date),
+      annotationKeyCount: Array.isArray(snapshot.annotationKeys) ? snapshot.annotationKeys.length : 0,
       positionAvailable: snapshot.positionAvailable,
+      annotationDraftAvailable: Boolean(snapshot.annotationDraft),
     };
 
     this.log?.(`Selection snapshot ${JSON.stringify(payload)}`);
+  },
+
+  clonePlainValue(value) {
+    if (value === null || value === undefined) {
+      return value;
+    }
+    if (["string", "number", "boolean"].includes(typeof value)) {
+      return value;
+    }
+    if (Array.isArray(value)) {
+      return value.map((item) => this.clonePlainValue(item));
+    }
+    if (typeof value === "object") {
+      const clone = {};
+      for (let key of Object.keys(value)) {
+        if (typeof value[key] !== "function") {
+          clone[key] = this.clonePlainValue(value[key]);
+        }
+      }
+      return clone;
+    }
+    return undefined;
   },
 
   truncate(value, maxLength) {

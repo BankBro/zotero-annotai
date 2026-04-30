@@ -51,4 +51,44 @@
 
     <html:div id="zotero-annotai-provider-status" class="zotero-annotai-prefs-status" role="status"></html:div>
   </groupbox>
+
+  <groupbox class="zotero-annotai-prefs">
+    <label><html:h2>AnnotAI 批注写入</html:h2></label>
+    <html:p class="zotero-annotai-prefs-note">
+      翻译结果只会在点击“写入批注”后写入 Zotero annotation comment；翻译完成不会自动写批注或自动高亮。
+    </html:p>
+
+    <html:div class="zotero-annotai-annotation-grid">
+      <html:span></html:span>
+      <html:span>样式</html:span>
+      <html:span>颜色</html:span>
+
+      <html:label for="zotero-annotai-annotation-translate-type">翻译</html:label>
+      <html:select id="zotero-annotai-annotation-translate-type">
+        <html:option value="highlight">高亮文本</html:option>
+        <html:option value="underline">下划线</html:option>
+      </html:select>
+      <html:input id="zotero-annotai-annotation-translate-color" type="color" />
+
+      <html:label for="zotero-annotai-annotation-explain-type">解释</html:label>
+      <html:select id="zotero-annotai-annotation-explain-type">
+        <html:option value="highlight">高亮文本</html:option>
+        <html:option value="underline">下划线</html:option>
+      </html:select>
+      <html:input id="zotero-annotai-annotation-explain-color" type="color" />
+
+      <html:label for="zotero-annotai-annotation-qa-type">问答</html:label>
+      <html:select id="zotero-annotai-annotation-qa-type">
+        <html:option value="highlight">高亮文本</html:option>
+        <html:option value="underline">下划线</html:option>
+      </html:select>
+      <html:input id="zotero-annotai-annotation-qa-color" type="color" />
+    </html:div>
+
+    <html:div class="zotero-annotai-prefs-actions">
+      <html:button id="zotero-annotai-annotation-save" type="button">保存批注设置</html:button>
+    </html:div>
+
+    <html:div id="zotero-annotai-annotation-status" class="zotero-annotai-prefs-status" role="status"></html:div>
+  </groupbox>
 </vbox>
