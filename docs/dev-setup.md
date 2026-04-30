@@ -179,7 +179,7 @@ AnnotAI | 翻译 | 解释 | 问答
 
 ## 阶段五第二步翻译批注写入验证
 
-翻译成功后，翻译浮窗会显示 `写入批注`。点击后，插件把当前翻译结果写入 Zotero annotation comment。已有 annotation comment 会被当前翻译结果覆盖；普通文本选区如果尚未保存 annotation，只会在用户点击 `写入批注` 后按设置创建 annotation。
+翻译成功后，翻译浮窗会显示 `写入批注`。点击后，插件把当前翻译结果写入 Zotero annotation comment。如果当前 Zotero selection 事件提供了已有 annotation 的 `id/key`，已有 annotation comment 会被当前翻译结果覆盖；普通文本选区如果尚未保存 annotation，只会在用户点击 `写入批注` 后按设置创建 annotation。重新拖选与已有批注相同的文本范围通常会被 Zotero 视为新的普通文本选区 draft，当前版本不会按 position 自动匹配旧批注。
 
 阶段五第二步应支持：
 
