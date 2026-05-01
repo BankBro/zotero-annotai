@@ -491,7 +491,7 @@ AI 回答：
 
 覆盖策略：
 
-- 0.1.19 当前实现只在 Zotero selection 事件提供已有 annotation 的 `id/key` 时覆盖该 annotation comment；重新拖选相同文本范围不会自动匹配旧批注。
+- 0.1.19/0.1.20 当前实现只在 Zotero selection 事件提供已有 annotation 的 `id/key` 时覆盖该 annotation comment；重新拖选相同文本范围不会自动匹配旧批注。
 - 如果已有 annotation comment 以 `[AI-` 开头，默认覆盖。
 - 如果已有 annotation comment 看起来是用户手写内容，覆盖前需要确认。
 - 高级设置可以允许始终覆盖已有批注。

@@ -4,6 +4,8 @@
 
 0.1.19 已进入阶段五第二步：翻译完成后可手动点击 `写入批注`，但翻译请求返回时仍不会自动写批注或自动高亮。第二步说明见 `docs/phase-5-translation-annotation-writeback.md`。
 
+0.1.20 已进入阶段五第三步：`解释` 浮窗接入真实 Provider 输出，但仍不写批注、不自动高亮。第三步说明见 `docs/phase-5-explain-provider-output.md`。
+
 ## 测试包
 
 ```text

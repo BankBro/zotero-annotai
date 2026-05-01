@@ -90,6 +90,7 @@ var ZoteroAnnotAI = {
     this.shutdownSelectionIntegration();
     this.loadScript("src/annotation-writer.js");
     this.loadScript("src/translation-task.js");
+    this.loadScript("src/explanation-task.js");
     this.loadScript("src/floating-panel.js");
     this.loadScript("src/reader-selection.js");
     ZoteroAnnotAIAnnotationWriter.init({
@@ -102,6 +103,7 @@ var ZoteroAnnotAI = {
       settings: typeof ZoteroAnnotAISettings !== "undefined" ? ZoteroAnnotAISettings : null,
       errors: typeof ZoteroAnnotAIProviderErrors !== "undefined" ? ZoteroAnnotAIProviderErrors : null,
       translationTask: typeof ZoteroAnnotAITranslationTask !== "undefined" ? ZoteroAnnotAITranslationTask : null,
+      explanationTask: typeof ZoteroAnnotAIExplanationTask !== "undefined" ? ZoteroAnnotAIExplanationTask : null,
       annotationWriter: ZoteroAnnotAIAnnotationWriter,
     });
     ZoteroAnnotAIReaderSelection.init({

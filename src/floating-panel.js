@@ -7,18 +7,20 @@ var ZoteroAnnotAIFloatingPanel = {
   settings: null,
   errors: null,
   translationTask: null,
+  explanationTask: null,
   annotationWriter: null,
   minWidth: 280,
   minHeight: 180,
   toastDocs: [],
 
-  init({ log, requestRunner, settings, errors, translationTask, annotationWriter } = {}) {
+  init({ log, requestRunner, settings, errors, translationTask, explanationTask, annotationWriter } = {}) {
     this.shutdown();
     this.log = log || ((message) => Zotero.debug(`[Zotero AnnotAI] ${message}`));
     this.requestRunner = requestRunner || null;
     this.settings = settings || null;
     this.errors = errors || null;
     this.translationTask = translationTask || null;
+    this.explanationTask = explanationTask || null;
     this.annotationWriter = annotationWriter || null;
     this.log("Floating panel module initialized");
   },
@@ -37,6 +39,7 @@ var ZoteroAnnotAIFloatingPanel = {
     this.settings = null;
     this.errors = null;
     this.translationTask = null;
+    this.explanationTask = null;
     this.annotationWriter = null;
   },
 
@@ -57,6 +60,9 @@ var ZoteroAnnotAIFloatingPanel = {
     if (action === "translate") {
       this.startTranslationRequest(panel, snapshot, { reason: "open" });
     }
+    else if (action === "explain") {
+      this.startExplanationRequest(panel, snapshot, { reason: "open" });
+    }
     else {
       this.renderPanel(panel);
     }
@@ -76,6 +82,9 @@ var ZoteroAnnotAIFloatingPanel = {
     if (panel.action === "translate") {
       return this.handleTranslatePanelUpdate(panel, snapshot);
     }
+    if (panel.action === "explain") {
+      return this.handleExplainPanelUpdate(panel, snapshot);
+    }
 
     panel.snapshot = snapshot;
 
@@ -88,9 +97,7 @@ var ZoteroAnnotAIFloatingPanel = {
       return { message };
     }
 
-    const message = panel.action === "translate"
-      ? "已请求升级翻译回答"
-      : "已请求升级解释回答";
+    const message = "已更新内容";
     this.renderPanel(panel);
     this.flashPanel(panel);
     this.log?.(`Floating panel upgraded action=${panel.action} panelID=${panel.id} upgradeCount=${panel.upgradeCount}`);
@@ -220,8 +227,11 @@ var ZoteroAnnotAIFloatingPanel = {
       upgradeCount: 0,
       status: action === "translate"
         ? "阶段五：翻译浮窗已接入 Provider 输出"
-        : "阶段四：Provider 请求层壳，浮窗暂不调用 AI",
+        : (action === "explain"
+          ? "阶段五：解释浮窗已接入 Provider 输出"
+          : "阶段四：Provider 请求层壳，浮窗暂不调用 AI"),
       translation: action === "translate" ? this.createTranslationState() : null,
+      explanation: action === "explain" ? this.createExplanationState() : null,
     };
 
     closeButton.addEventListener("click", (event) => {
@@ -329,6 +339,142 @@ var ZoteroAnnotAIFloatingPanel = {
       staleReason: "",
       writeback: this.createWritebackState(),
     };
+  },
+
+  createExplanationState() {
+    return {
+      status: "idle",
+      requestID: 0,
+      activeRequestID: null,
+      fingerprint: "",
+      controller: null,
+      result: null,
+      error: null,
+      elapsedMs: null,
+      model: "",
+      startedAt: null,
+      staleRequestID: null,
+      staleReason: "",
+    };
+  },
+
+  handleExplainPanelUpdate(panel, snapshot) {
+    const nextFingerprint = this.getExplanationFingerprint(snapshot);
+    const isLoading = this.isExplanationLoading(panel);
+
+    if (isLoading && nextFingerprint === panel.explanation.fingerprint) {
+      this.flashPanel(panel);
+      this.log?.(`Explain request duplicate discarded panelID=${panel.id} requestID=${panel.explanation.activeRequestID}`);
+      const message = "解释请求仍在进行，等待当前请求返回";
+      this.showToast(panel.doc, message);
+      return { message };
+    }
+
+    if (nextFingerprint === panel.explanation.fingerprint && ["success", "error", "timeout"].includes(panel.explanation.status)) {
+      this.flashPanel(panel);
+      const message = panel.explanation.status === "success"
+        ? "当前选区解释结果已存在"
+        : "当前选区解释请求已结束，可在浮窗中重试";
+      this.showToast(panel.doc, message);
+      return { message };
+    }
+
+    if (isLoading) {
+      this.markExplanationRequestStale(panel, "new-selection");
+    }
+
+    panel.snapshot = snapshot;
+    this.startExplanationRequest(panel, snapshot, { reason: "selection-update" });
+    this.flashPanel(panel);
+
+    const message = "已切换到新选区并重新解释";
+    this.showToast(panel.doc, message);
+    return { message };
+  },
+
+  async startExplanationRequest(panel, snapshot, { reason } = { reason: "request" }) {
+    const explanation = panel.explanation || this.createExplanationState();
+    panel.explanation = explanation;
+
+    const requestID = explanation.requestID + 1;
+    const fingerprint = this.getExplanationFingerprint(snapshot);
+    const startedAt = Date.now();
+
+    panel.snapshot = snapshot;
+    Object.assign(explanation, {
+      status: "loading",
+      requestID,
+      activeRequestID: requestID,
+      fingerprint,
+      controller: null,
+      result: null,
+      error: null,
+      elapsedMs: null,
+      model: "",
+      startedAt,
+    });
+    this.renderPanel(panel);
+
+    try {
+      const controller = this.createAbortController(panel.doc);
+      explanation.controller = controller;
+
+      if (!this.requestRunner || !this.settings || !this.explanationTask) {
+        throw this.createProviderUnavailableError();
+      }
+
+      const provider = this.settings.getActiveProvider();
+      const messages = this.explanationTask.createMessages(snapshot, { targetLanguage: "中文" });
+      this.log?.(
+        `Explain request started panelID=${panel.id} requestID=${requestID} reason=${reason} ` +
+        `${JSON.stringify(this.explanationTask.createSafeLogPayload(snapshot))}`
+      );
+
+      const result = await this.requestRunner.runChat({
+        provider,
+        messages,
+        timeoutMs: provider.timeoutMs,
+        signal: controller.signal,
+      });
+
+      if (!this.isActiveExplanationRequest(panel, requestID, fingerprint)) {
+        this.log?.(`Explain stale result discarded panelID=${panel.id} requestID=${requestID}`);
+        return;
+      }
+
+      const elapsedMs = Date.now() - startedAt;
+      Object.assign(explanation, {
+        status: "success",
+        activeRequestID: null,
+        controller: null,
+        result: result.content,
+        error: null,
+        elapsedMs,
+        model: result.model || provider.model || "",
+      });
+      this.renderPanel(panel);
+      this.log?.(`Explain request succeeded panelID=${panel.id} requestID=${requestID} model=${explanation.model} elapsedMs=${elapsedMs}`);
+    }
+    catch (error) {
+      const normalized = this.normalizeProviderRequestError(error);
+
+      if (!this.isActiveExplanationRequest(panel, requestID, fingerprint)) {
+        this.log?.(`Explain stale error discarded panelID=${panel.id} requestID=${requestID} error=${normalized.name}`);
+        return;
+      }
+
+      Object.assign(explanation, {
+        status: normalized.name === "TimeoutError" ? "timeout" : "error",
+        activeRequestID: null,
+        controller: null,
+        result: null,
+        error: normalized,
+        elapsedMs: Date.now() - startedAt,
+        model: "",
+      });
+      this.renderPanel(panel);
+      this.log?.(`Explain request failed panelID=${panel.id} requestID=${requestID} error=${normalized.name} elapsedMs=${explanation.elapsedMs}`);
+    }
   },
 
   handleTranslatePanelUpdate(panel, snapshot) {
@@ -484,8 +630,30 @@ var ZoteroAnnotAIFloatingPanel = {
     this.log?.(`Translate request marked stale panelID=${panel.id} requestID=${requestID} reason=${reason}`);
   },
 
+  markExplanationRequestStale(panel, reason) {
+    const explanation = panel.explanation;
+    if (!explanation?.controller) {
+      return;
+    }
+
+    const requestID = explanation.activeRequestID;
+    explanation.staleRequestID = requestID;
+    explanation.staleReason = reason;
+    try {
+      explanation.controller.abort();
+    }
+    catch (error) {
+      this.log?.(`Explain request abort failed panelID=${panel.id} requestID=${requestID} message=${error.message}`);
+    }
+    this.log?.(`Explain request marked stale panelID=${panel.id} requestID=${requestID} reason=${reason}`);
+  },
+
   isTranslationLoading(panel) {
     return Boolean(panel.translation?.status === "loading" && panel.translation.activeRequestID !== null);
+  },
+
+  isExplanationLoading(panel) {
+    return Boolean(panel.explanation?.status === "loading" && panel.explanation.activeRequestID !== null);
   },
 
   isActiveTranslationRequest(panel, requestID, fingerprint) {
@@ -496,9 +664,29 @@ var ZoteroAnnotAIFloatingPanel = {
     );
   },
 
+  isActiveExplanationRequest(panel, requestID, fingerprint) {
+    return Boolean(
+      panel.node?.isConnected
+      && panel.explanation?.activeRequestID === requestID
+      && panel.explanation?.fingerprint === fingerprint
+    );
+  },
+
   getTranslationFingerprint(snapshot) {
     if (this.translationTask?.createSelectionFingerprint) {
       return this.translationTask.createSelectionFingerprint(snapshot);
+    }
+
+    return [
+      String(snapshot?.selectedText || "").trim().replace(/\s+/g, " "),
+      Number.isInteger(snapshot?.attachmentItemID) ? String(snapshot.attachmentItemID) : "",
+      String(snapshot?.title || "").trim().replace(/\s+/g, " "),
+    ].join("\u001f");
+  },
+
+  getExplanationFingerprint(snapshot) {
+    if (this.explanationTask?.createSelectionFingerprint) {
+      return this.explanationTask.createSelectionFingerprint(snapshot);
     }
 
     return [
@@ -519,6 +707,10 @@ var ZoteroAnnotAIFloatingPanel = {
   },
 
   normalizeTranslationError(error) {
+    return this.normalizeProviderRequestError(error);
+  },
+
+  normalizeProviderRequestError(error) {
     if (this.errors?.ProviderError && error instanceof this.errors.ProviderError) {
       return error;
     }
@@ -535,6 +727,10 @@ var ZoteroAnnotAIFloatingPanel = {
   renderPanel(panel) {
     if (panel.action === "translate") {
       this.renderTranslatePanel(panel);
+      return;
+    }
+    if (panel.action === "explain") {
+      this.renderExplainPanel(panel);
       return;
     }
 
@@ -588,6 +784,112 @@ var ZoteroAnnotAIFloatingPanel = {
     panel.content.append(wrapper);
     panel.footer.textContent = this.getTranslateFooterText(panel);
     this.applyGeometry(panel);
+  },
+
+  renderExplainPanel(panel) {
+    const explanation = panel.explanation || this.createExplanationState();
+    panel.explanation = explanation;
+    panel.title.textContent = `AnnotAI · ${panel.label}`;
+    panel.content.replaceChildren();
+
+    const wrapper = panel.doc.createElement("div");
+    wrapper.style.cssText = [
+      "display:flex",
+      "flex-direction:column",
+      "gap:10px",
+      "min-height:100%",
+    ].join(";");
+
+    wrapper.append(
+      this.createTranslateSourceBlock(panel),
+      this.createExplainStateBlock(panel)
+    );
+
+    const actions = this.createExplainActions(panel);
+    if (actions) {
+      wrapper.append(actions);
+    }
+
+    panel.content.append(wrapper);
+    panel.footer.textContent = this.getExplainFooterText(panel);
+    this.applyGeometry(panel);
+  },
+
+  createExplainStateBlock(panel) {
+    const explanation = panel.explanation || {};
+    const section = panel.doc.createElement("section");
+    section.style.cssText = [
+      "box-sizing:border-box",
+      "display:flex",
+      "flex-direction:column",
+      "gap:8px",
+      "min-height:72px",
+    ].join(";");
+
+    if (explanation.status === "loading") {
+      const loading = panel.doc.createElement("div");
+      loading.textContent = "正在解释...";
+      loading.style.cssText = [
+        "padding:10px",
+        "border-radius:6px",
+        "background:#e8f0fe",
+        "color:#174ea6",
+        "font-weight:600",
+      ].join(";");
+      section.append(loading);
+      return section;
+    }
+
+    if (explanation.status === "success") {
+      const label = panel.doc.createElement("div");
+      label.textContent = "解释结果";
+      label.style.cssText = "font-weight:600;color:#3c4043";
+
+      const result = panel.doc.createElement("div");
+      result.style.cssText = [
+        "box-sizing:border-box",
+        "padding:10px",
+        "border:1px solid rgba(0,0,0,0.1)",
+        "border-radius:6px",
+        "background:#fff",
+        "white-space:pre-wrap",
+        "word-break:break-word",
+        "line-height:1.55",
+      ].join(";");
+      this.renderFormattedTranslationResult(panel, result, explanation.result || "");
+
+      const meta = panel.doc.createElement("div");
+      meta.textContent = [
+        explanation.model ? `模型：${explanation.model}` : "",
+        Number.isInteger(explanation.elapsedMs) ? `耗时：${explanation.elapsedMs}ms` : "",
+      ].filter(Boolean).join(" · ");
+      meta.style.cssText = "color:#5f6368;font-size:12px";
+
+      section.append(label, result, meta);
+      return section;
+    }
+
+    if (explanation.status === "error" || explanation.status === "timeout") {
+      const error = panel.doc.createElement("div");
+      error.textContent = this.getExplanationErrorMessage(explanation.error);
+      error.style.cssText = [
+        "padding:10px",
+        "border-radius:6px",
+        "background:#fce8e6",
+        "color:#a50e0e",
+        "line-height:1.5",
+        "white-space:pre-wrap",
+        "word-break:break-word",
+      ].join(";");
+      section.append(error);
+      return section;
+    }
+
+    const idle = panel.doc.createElement("div");
+    idle.textContent = "等待解释请求";
+    idle.style.cssText = "color:#5f6368";
+    section.append(idle);
+    return section;
   },
 
   createTranslateSourceBlock(panel) {
@@ -732,7 +1034,7 @@ var ZoteroAnnotAIFloatingPanel = {
 
   appendFormattedTranslationLine(panel, container, line) {
     const text = String(line);
-    const fieldMatch = text.match(/^(\s*)((?:注音|音标|本文义|常用义|译文|语境说明)(?:[（(][^）)\n]{1,24}[）)])?[：:])(\s*)/);
+    const fieldMatch = text.match(/^(\s*)((?:注音|音标|本文义|常用义|译文|语境说明|核心意思|补充说明|上下文不足)(?:[（(][^）)\n]{1,24}[）)])?[：:])(\s*)/);
     if (!fieldMatch) {
       this.appendFormattedTranslationText(panel, container, text);
       return;
@@ -812,6 +1114,34 @@ var ZoteroAnnotAIFloatingPanel = {
     return actions;
   },
 
+  createExplainActions(panel) {
+    const status = panel.explanation?.status;
+    if (!["success", "error", "timeout"].includes(status)) {
+      return null;
+    }
+
+    const actions = panel.doc.createElement("div");
+    actions.style.cssText = [
+      "display:flex",
+      "align-items:center",
+      "gap:8px",
+      "flex-wrap:wrap",
+    ].join(";");
+
+    if (status === "success") {
+      actions.append(
+        this.createPanelButton(panel, "复制", () => this.copyExplanationResult(panel)),
+        this.createPanelButton(panel, "重新解释", () => this.startExplanationRequest(panel, panel.snapshot, { reason: "manual-retry" }))
+      );
+      return actions;
+    }
+
+    actions.append(
+      this.createPanelButton(panel, "重试", () => this.startExplanationRequest(panel, panel.snapshot, { reason: "manual-retry" }))
+    );
+    return actions;
+  },
+
   createPanelButton(panel, label, onClick, { disabled } = { disabled: false }) {
     const button = panel.doc.createElement("button");
     button.type = "button";
@@ -861,12 +1191,33 @@ var ZoteroAnnotAIFloatingPanel = {
     return panel.status;
   },
 
+  getExplainFooterText(panel) {
+    const status = panel.explanation?.status;
+    if (status === "loading") {
+      return "阶段五：正在调用 Provider 解释，不写批注不高亮";
+    }
+    if (status === "success") {
+      return "阶段五：解释完成；不写批注不高亮";
+    }
+    if (status === "timeout") {
+      return "阶段五：解释请求超时";
+    }
+    if (status === "error") {
+      return "阶段五：解释请求失败";
+    }
+    return panel.status;
+  },
+
   getTranslationErrorMessage(error) {
     if (this.errors?.toUserMessage) {
       return this.errors.toUserMessage(error);
     }
 
     return error?.message || "Provider 请求失败";
+  },
+
+  getExplanationErrorMessage(error) {
+    return this.getTranslationErrorMessage(error);
   },
 
   async writeTranslationAnnotation(panel) {
@@ -992,6 +1343,24 @@ var ZoteroAnnotAIFloatingPanel = {
     }
 
     this.showToast(panel.doc, result ? "已复制翻译结果" : "复制失败");
+  },
+
+  copyExplanationResult(panel) {
+    const text = panel.explanation?.result || "";
+    if (!text) {
+      this.showToast(panel.doc, "没有可复制的解释结果");
+      return;
+    }
+
+    const result = this.copyText(panel, text);
+    if (result?.then) {
+      result
+        .then(() => this.showToast(panel.doc, "已复制解释结果"))
+        .catch(() => this.showToast(panel.doc, "复制失败"));
+      return;
+    }
+
+    this.showToast(panel.doc, result ? "已复制解释结果" : "复制失败");
   },
 
   copyText(panel, text) {
@@ -1243,6 +1612,16 @@ var ZoteroAnnotAIFloatingPanel = {
         this.log?.(`Translate request abort on close failed panelID=${panel.id} message=${error.message}`);
       }
       panel.translation.controller = null;
+    }
+    if (panel.explanation?.controller) {
+      try {
+        panel.explanation.activeRequestID = null;
+        panel.explanation.controller.abort();
+      }
+      catch (error) {
+        this.log?.(`Explain request abort on close failed panelID=${panel.id} message=${error.message}`);
+      }
+      panel.explanation.controller = null;
     }
     panel.node?.remove();
     this.panels = this.panels.filter((candidate) => candidate !== panel);
