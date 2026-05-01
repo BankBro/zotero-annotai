@@ -27,6 +27,7 @@ $files = @(
     "src/request-runner.js",
     "src/annotation-writer.js",
     "src/translation-task.js",
+    "src/explanation-task.js",
     "src/floating-panel.js",
     "src/reader-selection.js"
 )

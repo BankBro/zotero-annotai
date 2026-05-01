@@ -23,10 +23,10 @@ npm run package
 打包完成后会生成：
 
 ```text
-dist/zotero-annotai-0.1.19.xpi
+dist/zotero-annotai-0.1.20.xpi
 ```
 
-这个 `.xpi` 目前包含 Zotero 插件最小文件、阶段二选区验证脚本、阶段三浮窗脚本、阶段四 Provider 请求层壳、阶段五翻译请求接入和翻译批注手动写入：
+这个 `.xpi` 目前包含 Zotero 插件最小文件、阶段二选区验证脚本、阶段三浮窗脚本、阶段四 Provider 请求层壳、阶段五翻译请求接入、翻译批注手动写入和解释请求接入：
 
 ```text
 manifest.json
@@ -41,6 +41,7 @@ src/openai-compatible-client.js
 src/request-runner.js
 src/annotation-writer.js
 src/translation-task.js
+src/explanation-task.js
 src/floating-panel.js
 src/reader-selection.js
 ```
@@ -70,7 +71,7 @@ Tools -> Add-ons -> 齿轮菜单 -> Install Add-on From File...
 选择：
 
 ```text
-dist/zotero-annotai-0.1.19.xpi
+dist/zotero-annotai-0.1.20.xpi
 ```
 
 ## 查看启动日志
@@ -84,7 +85,7 @@ Help -> Debug Output Logging -> View Output
 安装、启用或重启 Zotero 后，应看到类似日志：
 
 ```text
-[Zotero AnnotAI] Startup 0.1.19
+[Zotero AnnotAI] Startup 0.1.20
 [Zotero AnnotAI] Provider request runner initialized
 [Zotero AnnotAI] Preference pane registered
 [Zotero AnnotAI] Floating panel module initialized
@@ -94,8 +95,8 @@ Help -> Debug Output Logging -> View Output
 禁用或卸载插件时，应看到类似：
 
 ```text
-[Zotero AnnotAI] Shutdown 0.1.19
-[Zotero AnnotAI] Uninstall 0.1.19
+[Zotero AnnotAI] Shutdown 0.1.20
+[Zotero AnnotAI] Uninstall 0.1.20
 ```
 
 ## 阶段二选区验证
@@ -191,9 +192,26 @@ AnnotAI | 翻译 | 解释 | 问答
 
 更完整的阶段五第二步验收说明见 `docs/phase-5-translation-annotation-writeback.md`。
 
+## 阶段五第三步解释验证
+
+在 Provider 配置可用后，打开 PDF，选中文本并点击 `解释`。解释浮窗应显示 `正在解释...`，请求返回后显示真实 Provider 解释结果、模型和耗时。
+
+阶段五第三步应支持：
+
+- `解释` 浮窗真实调用 Provider。
+- 默认输出中文。
+- 请求只发送选中文本和论文标题、作者、日期等轻量元数据。
+- 解释结果包含 `核心意思：` 和 `补充说明：` 两个字段。
+- 同一文本请求未返回时重复点击 `解释` 不发送第二个请求。
+- 新文本请求会替换当前解释浮窗内容，并丢弃旧请求结果。
+- 解释完成前后不显示 `写入批注`，不自动创建 annotation、不高亮、不写 comment。
+- `问答` 仍为诊断壳。
+
+更完整的阶段五第三步验收说明见 `docs/phase-5-explain-provider-output.md`。
+
 ## 当前阶段边界
 
-当前阶段验证插件骨架、PDF 阅读器选区接入、浮窗 UI 基础、Provider 请求层壳和翻译浮窗真实 Provider 输出：
+当前阶段验证插件骨架、PDF 阅读器选区接入、浮窗 UI 基础、Provider 请求层、翻译浮窗真实 Provider 输出、翻译手动写入批注和解释浮窗真实 Provider 输出：
 
 - 能被 Zotero 7 安装。
 - 能执行 bootstrap 生命周期。
@@ -208,10 +226,12 @@ AnnotAI | 翻译 | 解释 | 问答
 - 能让 `翻译` 浮窗调用 Provider 并显示结果。
 - 能在用户点击 `写入批注` 后，把当前翻译结果写入 Zotero annotation comment。
 - 能用 requestID 防止旧翻译结果覆盖新选区。
+- 能让 `解释` 浮窗调用 Provider 并显示结果。
+- 能用 requestID 防止旧解释结果覆盖新选区。
 
 当前阶段不包含：
 
-- 真实解释、问答请求。
+- 问答真实请求。
 - 自动高亮。
 - 自动批注写入。
 - 解释和问答写入批注。
