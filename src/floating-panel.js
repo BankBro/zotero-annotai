@@ -7,17 +7,19 @@ var ZoteroAnnotAIFloatingPanel = {
   settings: null,
   errors: null,
   translationTask: null,
+  annotationWriter: null,
   minWidth: 280,
   minHeight: 180,
   toastDocs: [],
 
-  init({ log, requestRunner, settings, errors, translationTask } = {}) {
+  init({ log, requestRunner, settings, errors, translationTask, annotationWriter } = {}) {
     this.shutdown();
     this.log = log || ((message) => Zotero.debug(`[Zotero AnnotAI] ${message}`));
     this.requestRunner = requestRunner || null;
     this.settings = settings || null;
     this.errors = errors || null;
     this.translationTask = translationTask || null;
+    this.annotationWriter = annotationWriter || null;
     this.log("Floating panel module initialized");
   },
 
@@ -35,6 +37,7 @@ var ZoteroAnnotAIFloatingPanel = {
     this.settings = null;
     this.errors = null;
     this.translationTask = null;
+    this.annotationWriter = null;
   },
 
   open({ action, label, doc, reader, snapshot, anchorElement }) {
@@ -299,6 +302,17 @@ var ZoteroAnnotAIFloatingPanel = {
     panel.node.style.height = `${panel.height}px`;
   },
 
+  createWritebackState() {
+    return {
+      status: "idle",
+      fingerprint: "",
+      message: "",
+      error: null,
+      itemID: null,
+      key: "",
+    };
+  },
+
   createTranslationState() {
     return {
       status: "idle",
@@ -313,6 +327,7 @@ var ZoteroAnnotAIFloatingPanel = {
       startedAt: null,
       staleRequestID: null,
       staleReason: "",
+      writeback: this.createWritebackState(),
     };
   },
 
@@ -361,6 +376,7 @@ var ZoteroAnnotAIFloatingPanel = {
       elapsedMs: null,
       model: "",
       startedAt,
+      writeback: this.createWritebackState(),
     });
     this.renderPanel(panel);
 
@@ -400,6 +416,7 @@ var ZoteroAnnotAIFloatingPanel = {
         error: null,
         elapsedMs,
         model: result.model || provider.model || "",
+        writeback: { ...this.createWritebackState(), fingerprint },
       });
       this.renderPanel(panel);
       this.log?.(`Translate request succeeded panelID=${panel.id} requestID=${requestID} model=${translation.model} elapsedMs=${elapsedMs}`);
@@ -563,6 +580,11 @@ var ZoteroAnnotAIFloatingPanel = {
       wrapper.append(actions);
     }
 
+    const writebackStatus = this.createWritebackStatusBlock(panel);
+    if (writebackStatus) {
+      wrapper.append(writebackStatus);
+    }
+
     panel.content.append(wrapper);
     panel.footer.textContent = this.getTranslateFooterText(panel);
     this.applyGeometry(panel);
@@ -673,6 +695,31 @@ var ZoteroAnnotAIFloatingPanel = {
     return section;
   },
 
+  createWritebackStatusBlock(panel) {
+    const writeback = panel.translation?.writeback;
+    if (!writeback || writeback.status === "idle") {
+      return null;
+    }
+
+    const node = panel.doc.createElement("div");
+    const isError = writeback.status === "error";
+    const isLoading = writeback.status === "loading";
+    node.textContent = isError
+      ? this.getWritebackErrorMessage(writeback.error)
+      : (writeback.message || (isLoading ? "正在写入批注..." : "已写入批注。"));
+    node.style.cssText = [
+      "box-sizing:border-box",
+      "padding:8px 10px",
+      "border-radius:6px",
+      "line-height:1.45",
+      "white-space:pre-wrap",
+      "word-break:break-word",
+      isError ? "background:#fce8e6" : (isLoading ? "background:#e8f0fe" : "background:#e6f4ea"),
+      isError ? "color:#a50e0e" : (isLoading ? "color:#174ea6" : "color:#137333"),
+    ].join(";");
+    return node;
+  },
+
   renderFormattedTranslationResult(panel, container, text) {
     const lines = String(text || "").split(/\r?\n/);
     lines.forEach((line, index) => {
@@ -745,7 +792,14 @@ var ZoteroAnnotAIFloatingPanel = {
     ].join(";");
 
     if (status === "success") {
+      const isWriting = panel.translation?.writeback?.status === "loading";
       actions.append(
+        this.createPanelButton(
+          panel,
+          isWriting ? "写入中..." : "写入批注",
+          () => this.writeTranslationAnnotation(panel),
+          { disabled: isWriting }
+        ),
         this.createPanelButton(panel, "复制", () => this.copyTranslationResult(panel)),
         this.createPanelButton(panel, "重新翻译", () => this.startTranslationRequest(panel, panel.snapshot, { reason: "manual-retry" }))
       );
@@ -758,23 +812,27 @@ var ZoteroAnnotAIFloatingPanel = {
     return actions;
   },
 
-  createPanelButton(panel, label, onClick) {
+  createPanelButton(panel, label, onClick, { disabled } = { disabled: false }) {
     const button = panel.doc.createElement("button");
     button.type = "button";
     button.textContent = label;
+    button.disabled = Boolean(disabled);
     button.style.cssText = [
       "border:1px solid rgba(0,0,0,0.2)",
       "border-radius:4px",
-      "background:#fff",
-      "color:#1a73e8",
+      disabled ? "background:#f1f3f4" : "background:#fff",
+      disabled ? "color:#80868b" : "color:#1a73e8",
       "padding:3px 8px",
       "font:inherit",
-      "cursor:pointer",
+      disabled ? "cursor:default" : "cursor:pointer",
     ].join(";");
 
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
+      if (button.disabled) {
+        return;
+      }
       onClick();
     });
     return button;
@@ -786,7 +844,13 @@ var ZoteroAnnotAIFloatingPanel = {
       return "阶段五：正在调用 Provider 翻译，不写批注不高亮";
     }
     if (status === "success") {
-      return "阶段五：翻译完成，不写批注不高亮";
+      if (panel.translation?.writeback?.status === "loading") {
+        return "阶段五：正在手动写入批注；翻译完成本身不自动写批注不高亮";
+      }
+      if (panel.translation?.writeback?.status === "success") {
+        return "阶段五：翻译结果已手动写入批注；不自动高亮";
+      }
+      return "阶段五：翻译完成，可手动写入批注；不自动写批注不高亮";
     }
     if (status === "timeout") {
       return "阶段五：翻译请求超时";
@@ -803,6 +867,113 @@ var ZoteroAnnotAIFloatingPanel = {
     }
 
     return error?.message || "Provider 请求失败";
+  },
+
+  async writeTranslationAnnotation(panel) {
+    const translation = panel.translation;
+    const text = translation?.result || "";
+    if (!text) {
+      this.showToast(panel.doc, "没有可写入的翻译结果");
+      return;
+    }
+
+    if (!this.annotationWriter?.writeTranslationComment) {
+      const error = this.createWritebackError("当前 Zotero Reader 不支持写入批注。");
+      translation.writeback = {
+        ...this.createWritebackState(),
+        status: "error",
+        fingerprint: translation.fingerprint,
+        error,
+      };
+      this.renderPanel(panel);
+      return;
+    }
+
+    const fingerprint = translation.fingerprint;
+    translation.writeback = {
+      ...this.createWritebackState(),
+      status: "loading",
+      fingerprint,
+      message: "正在写入批注...",
+    };
+    this.renderPanel(panel);
+
+    try {
+      const result = await this.annotationWriter.writeTranslationComment({
+        reader: panel.reader,
+        snapshot: panel.snapshot,
+        text,
+      });
+
+      if (!this.isActiveWriteback(panel, fingerprint, text)) {
+        this.log?.(`Annotation writeback stale result discarded panelID=${panel.id}`);
+        return;
+      }
+
+      translation.writeback = {
+        ...this.createWritebackState(),
+        status: "success",
+        fingerprint,
+        message: result?.message || "已写入批注。",
+        itemID: Number.isInteger(result?.itemID) ? result.itemID : null,
+        key: result?.key || "",
+      };
+      this.renderPanel(panel);
+      this.showToast(panel.doc, "已写入批注");
+    }
+    catch (error) {
+      if (!this.isActiveWriteback(panel, fingerprint, text)) {
+        this.log?.(`Annotation writeback stale error discarded panelID=${panel.id}`);
+        return;
+      }
+
+      const normalized = this.normalizeWritebackError(error);
+      translation.writeback = {
+        ...this.createWritebackState(),
+        status: "error",
+        fingerprint,
+        error: normalized,
+      };
+      this.renderPanel(panel);
+      this.showToast(panel.doc, this.getWritebackErrorMessage(normalized));
+      this.log?.(`Annotation writeback failed panelID=${panel.id} error=${normalized.code || normalized.name}`);
+    }
+  },
+
+  isActiveWriteback(panel, fingerprint, text) {
+    return Boolean(
+      panel.node?.isConnected
+      && panel.translation?.status === "success"
+      && panel.translation?.fingerprint === fingerprint
+      && panel.translation?.result === text
+      && panel.translation?.writeback?.status === "loading"
+      && panel.translation?.writeback?.fingerprint === fingerprint
+    );
+  },
+
+  normalizeWritebackError(error) {
+    if (error?.userMessage) {
+      return error;
+    }
+    return this.createWritebackError(this.sanitizeMessage(error?.message || "写入批注失败。"));
+  },
+
+  createWritebackError(message) {
+    const error = new Error(message);
+    error.name = "AnnotationWriteError";
+    error.userMessage = message;
+    return error;
+  },
+
+  getWritebackErrorMessage(error) {
+    return error?.userMessage || error?.message || "写入批注失败。";
+  },
+
+  sanitizeMessage(message) {
+    return String(message || "")
+      .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/g, "Bearer [redacted]")
+      .replace(/sk-[A-Za-z0-9._-]+/g, "sk-[redacted]")
+      .slice(0, 240);
   },
 
   copyTranslationResult(panel) {

@@ -19,6 +19,7 @@ var ZoteroAnnotAIPreferences = {
 
     this.bindEvents();
     this.loadProvider();
+    this.loadAnnotationOptions();
   },
 
   lookup(name) {
@@ -29,6 +30,7 @@ var ZoteroAnnotAIPreferences = {
     this.getElement("provider-save")?.addEventListener("click", () => this.saveProvider());
     this.getElement("provider-test")?.addEventListener("click", () => this.testProvider());
     this.getElement("provider-cancel")?.addEventListener("click", () => this.cancelTest());
+    this.getElement("annotation-save")?.addEventListener("click", () => this.saveAnnotationOptions());
   },
 
   loadProvider() {
@@ -46,6 +48,21 @@ var ZoteroAnnotAIPreferences = {
     this.setValue("provider-timeout", String(provider.timeoutMs));
     this.setChecked("provider-streaming", provider.enableStreaming);
     this.showStatus(provider.lastTestStatus || "Provider 尚未连接测试", "");
+  },
+
+  loadAnnotationOptions() {
+    const settings = this.lookup("ZoteroAnnotAISettings");
+    if (!settings?.getAnnotationOptions) {
+      this.showAnnotationStatus("批注写入设置模块不可用。", "error");
+      return;
+    }
+
+    for (let action of ["translate", "explain", "qa"]) {
+      const options = settings.getAnnotationOptions(action);
+      this.setValue(`annotation-${action}-type`, options.type);
+      this.setValue(`annotation-${action}-color`, options.color);
+    }
+    this.showAnnotationStatus("批注写入设置已加载。", "");
   },
 
   saveProvider() {
@@ -101,6 +118,28 @@ var ZoteroAnnotAIPreferences = {
     this.testController?.abort();
   },
 
+  saveAnnotationOptions() {
+    const settings = this.lookup("ZoteroAnnotAISettings");
+    if (!settings?.saveAnnotationOptions) {
+      this.showAnnotationStatus("批注写入设置模块不可用。", "error");
+      return;
+    }
+
+    try {
+      for (let action of ["translate", "explain", "qa"]) {
+        settings.saveAnnotationOptions(action, {
+          type: this.getValue(`annotation-${action}-type`),
+          color: this.getValue(`annotation-${action}-color`),
+        });
+      }
+      this.showAnnotationStatus("批注写入设置已保存。", "ok");
+    }
+    catch (error) {
+      this.showAnnotationStatus(error.message || "批注写入设置保存失败。", "error");
+      throw error;
+    }
+  },
+
   readProviderForm() {
     const timeoutMs = Number.parseInt(this.getValue("provider-timeout"), 10);
     return {
@@ -122,6 +161,20 @@ var ZoteroAnnotAIPreferences = {
 
   showStatus(message, state) {
     const node = this.getElement("provider-status");
+    if (!node) {
+      return;
+    }
+    node.textContent = message || "";
+    if (state) {
+      node.dataset.state = state;
+    }
+    else {
+      delete node.dataset.state;
+    }
+  },
+
+  showAnnotationStatus(message, state) {
+    const node = this.getElement("annotation-status");
     if (!node) {
       return;
     }

@@ -59,10 +59,10 @@ AnnotAI | 翻译 | 解释 | 问答
 5. Debug Output 中应出现类似日志：
 
 ```text
-[Zotero AnnotAI] Selection snapshot {"action":"translate","charCount":42,"selectedTextPreview":"..."}
+[Zotero AnnotAI] Selection snapshot {"action":"translate","charCount":42,"annotationDraftAvailable":true}
 ```
 
-日志中的 `selectedTextPreview` 是选中文本预览，较长文本会被截断，避免 Debug Output 记录过多论文内容。
+日志只记录选区长度、条目 ID、annotation key 数量和 draft 是否可用等脱敏字段，不输出完整或预览版选中文本。
 
 ## 当前不做的事情
 

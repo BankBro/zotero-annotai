@@ -6,6 +6,10 @@
   font: 13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+.zotero-annotai-prefs + .zotero-annotai-prefs {
+  margin-top: 14px;
+}
+
 .zotero-annotai-prefs h2 {
   margin: 0 0 8px;
   font-size: 18px;
@@ -30,6 +34,14 @@
   margin-bottom: 14px;
 }
 
+.zotero-annotai-annotation-grid {
+  display: grid;
+  grid-template-columns: 120px 160px 80px;
+  gap: 10px 12px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
 .zotero-annotai-prefs-grid input[type="text"],
 .zotero-annotai-prefs-grid input[type="url"],
 .zotero-annotai-prefs-grid input[type="password"] {
@@ -37,6 +49,17 @@
   width: 100%;
   min-height: 28px;
   padding: 3px 6px;
+}
+
+.zotero-annotai-annotation-grid select {
+  min-height: 28px;
+}
+
+.zotero-annotai-annotation-grid input[type="color"] {
+  box-sizing: border-box;
+  width: 64px;
+  height: 28px;
+  padding: 2px;
 }
 
 .zotero-annotai-prefs-inline,

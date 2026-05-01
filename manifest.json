@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Zotero AnnotAI",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "description": "AI-assisted reading and annotation workflow for Zotero.",
   "author": "BankBro",
   "homepage_url": "https://github.com/BankBro/zotero-annotai",
