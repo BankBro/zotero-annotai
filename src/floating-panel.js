@@ -176,6 +176,7 @@ var ZoteroAnnotAIFloatingPanel = {
       "padding:10px 12px",
       "background:#fff",
     ].join(";");
+    this.allowTextSelection(content);
 
     footer.className = "zotero-annotai-floating-panel-footer";
     footer.style.cssText = [
@@ -748,6 +749,7 @@ var ZoteroAnnotAIFloatingPanel = {
       "word-break:break-word",
     ].join(";");
     panel.content.append(pre);
+    this.allowTextSelection(pre);
     panel.footer.textContent = panel.status;
     this.applyGeometry(panel);
   },
@@ -857,6 +859,7 @@ var ZoteroAnnotAIFloatingPanel = {
         "line-height:1.55",
       ].join(";");
       this.renderFormattedTranslationResult(panel, result, explanation.result || "");
+      this.allowTextSelection(result);
 
       const meta = panel.doc.createElement("div");
       meta.textContent = [
@@ -881,6 +884,7 @@ var ZoteroAnnotAIFloatingPanel = {
         "white-space:pre-wrap",
         "word-break:break-word",
       ].join(";");
+      this.allowTextSelection(error);
       section.append(error);
       return section;
     }
@@ -915,6 +919,7 @@ var ZoteroAnnotAIFloatingPanel = {
       "max-height:96px",
       "overflow:auto",
     ].join(";");
+    this.allowTextSelection(text);
 
     section.append(label, text);
     return section;
@@ -962,6 +967,7 @@ var ZoteroAnnotAIFloatingPanel = {
         "line-height:1.55",
       ].join(";");
       this.renderFormattedTranslationResult(panel, result, translation.result || "");
+      this.allowTextSelection(result);
 
       const meta = panel.doc.createElement("div");
       meta.textContent = [
@@ -986,6 +992,7 @@ var ZoteroAnnotAIFloatingPanel = {
         "white-space:pre-wrap",
         "word-break:break-word",
       ].join(";");
+      this.allowTextSelection(error);
       section.append(error);
       return section;
     }
@@ -1019,6 +1026,19 @@ var ZoteroAnnotAIFloatingPanel = {
       isError ? "background:#fce8e6" : (isLoading ? "background:#e8f0fe" : "background:#e6f4ea"),
       isError ? "color:#a50e0e" : (isLoading ? "color:#174ea6" : "color:#137333"),
     ].join(";");
+    this.allowTextSelection(node);
+    return node;
+  },
+
+  allowTextSelection(node) {
+    if (!node?.style?.setProperty) {
+      return node;
+    }
+
+    node.style.setProperty("user-select", "text", "important");
+    node.style.setProperty("-moz-user-select", "text", "important");
+    node.style.setProperty("-webkit-user-select", "text", "important");
+    node.style.cursor = "text";
     return node;
   },
 
