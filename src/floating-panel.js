@@ -241,6 +241,8 @@ var ZoteroAnnotAIFloatingPanel = {
       this.removePanel(panel, { log: true });
     });
 
+    this.installContentSelectionEventGuards(panel);
+
     if (doc.defaultView?.PointerEvent) {
       node.addEventListener("pointerdown", (event) => this.activatePanel(panel, event));
       header.addEventListener("pointerdown", (event) => this.startDrag(panel, event));
@@ -860,6 +862,7 @@ var ZoteroAnnotAIFloatingPanel = {
       ].join(";");
       this.renderFormattedTranslationResult(panel, result, explanation.result || "");
       this.allowTextSelection(result);
+      this.makeReadonlyRichText(result);
 
       const meta = panel.doc.createElement("div");
       meta.textContent = [
@@ -968,6 +971,7 @@ var ZoteroAnnotAIFloatingPanel = {
       ].join(";");
       this.renderFormattedTranslationResult(panel, result, translation.result || "");
       this.allowTextSelection(result);
+      this.makeReadonlyRichText(result);
 
       const meta = panel.doc.createElement("div");
       meta.textContent = [
@@ -1040,6 +1044,68 @@ var ZoteroAnnotAIFloatingPanel = {
     node.style.setProperty("-webkit-user-select", "text", "important");
     node.style.cursor = "text";
     return node;
+  },
+
+  makeReadonlyRichText(node) {
+    if (!node?.setAttribute || !node?.addEventListener) {
+      return node;
+    }
+
+    node.setAttribute("contenteditable", "true");
+    node.setAttribute("role", "textbox");
+    node.setAttribute("aria-readonly", "true");
+    node.setAttribute("spellcheck", "false");
+    node.setAttribute("tabindex", "0");
+    node.style.setProperty("caret-color", "transparent", "important");
+
+    const blockEdit = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    for (let type of ["beforeinput", "input", "paste", "drop", "cut"]) {
+      node.addEventListener(type, blockEdit, true);
+    }
+    node.addEventListener("keydown", (event) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+      if ([
+        "ArrowLeft",
+        "ArrowRight",
+        "ArrowUp",
+        "ArrowDown",
+        "Home",
+        "End",
+        "PageUp",
+        "PageDown",
+        "Tab",
+        "Escape",
+      ].includes(event.key)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    }, true);
+    return node;
+  },
+
+  installContentSelectionEventGuards(panel) {
+    const content = panel.content;
+    if (!content?.addEventListener) {
+      return;
+    }
+
+    const stopReaderSelectionInterference = (event) => {
+      if (event.button !== undefined && event.button !== 0) {
+        return;
+      }
+      this.bringToFront(panel);
+      event.stopPropagation();
+    };
+
+    for (let type of ["pointerdown", "pointermove", "pointerup", "mousedown", "mousemove", "mouseup", "dblclick"]) {
+      content.addEventListener(type, stopReaderSelectionInterference, true);
+    }
   },
 
   renderFormattedTranslationResult(panel, container, text) {
